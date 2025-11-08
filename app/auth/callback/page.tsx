@@ -12,37 +12,43 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     const exchangeSession = async () => {
       try {
-        const hasTokenInHash = window.location.hash.includes('access_token=');
+        // Para lidar com o token no hash, usamos setSession
+        const hashParams = new URLSearchParams(
+          window.location.hash.substring(1),
+        );
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
+
         let session = null;
 
-        if (hasTokenInHash) {
-          const { data, error } = await supabase.auth.getSessionFromUrl({
-            storeSession: true,
+        if (accessToken && refreshToken) {
+          // Fluxo implícito - seta a sessão manualmente
+          const { data, error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
           });
-
           if (error) {
             throw error;
           }
-
           session = data.session;
+
+          // Limpa o hash da URL
+          const cleanUrl = `${window.location.origin}${window.location.pathname}`;
+          window.history.replaceState({}, document.title, cleanUrl);
         } else {
+          // Fluxo PKCE com código
           const { data, error } = await supabase.auth.exchangeCodeForSession(
             window.location.href,
           );
-
           if (error) {
             throw error;
           }
-
           session = data.session;
         }
 
         if (!session) {
           throw new Error('Sessão inválida recebida do Supabase.');
         }
-
-        const cleanUrl = `${window.location.origin}${window.location.pathname}`;
-        window.history.replaceState({}, document.title, cleanUrl);
 
         const userEmail = session.user?.email;
 
