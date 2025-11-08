@@ -4,7 +4,7 @@ Este projeto Next.js entrega:
 
 - Landing page escura anunciando a nova versão BUUA v2 (`app/page.tsx`);
 - Fluxo de autenticação via Google com Supabase (`/login`, `/signup`, `/auth/callback`);
-- Dashboard autenticada que exibe o email do usuário logado (`/dashboard`).
+- Dashboard autenticada (página `home`) que exibe o email do usuário logado (`/home`, `/dashboard` redireciona).
 
 ### Requisitos de ambiente
 

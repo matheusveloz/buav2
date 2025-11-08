@@ -12,15 +12,39 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     const exchangeSession = async () => {
       try {
-        const { data, error } = await supabase.auth.exchangeCodeForSession(
-          window.location.href,
-        );
+        const hasTokenInHash = window.location.hash.includes('access_token=');
+        let session = null;
 
-        if (error) {
-          throw error;
+        if (hasTokenInHash) {
+          const { data, error } = await supabase.auth.getSessionFromUrl({
+            storeSession: true,
+          });
+
+          if (error) {
+            throw error;
+          }
+
+          session = data.session;
+        } else {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(
+            window.location.href,
+          );
+
+          if (error) {
+            throw error;
+          }
+
+          session = data.session;
         }
 
-        const userEmail = data.session?.user?.email;
+        if (!session) {
+          throw new Error('Sessão inválida recebida do Supabase.');
+        }
+
+        const cleanUrl = `${window.location.origin}${window.location.pathname}`;
+        window.history.replaceState({}, document.title, cleanUrl);
+
+        const userEmail = session.user?.email;
 
         if (userEmail) {
           const { error: upsertError } = await supabase
@@ -37,7 +61,7 @@ export default function AuthCallbackPage() {
           }
         }
 
-        router.replace('/dashboard');
+        router.replace('/home');
       } catch (error) {
         setStatus('error');
         const readableMessage =

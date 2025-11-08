@@ -15,6 +15,7 @@ export default function LoginPage() {
       const redirectTo = `${window.location.origin}/auth/callback`;
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
+        flowType: 'pkce',
         options: {
           redirectTo,
         },
