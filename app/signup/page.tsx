@@ -12,12 +12,10 @@ export default function SignupPage() {
     setErrorMessage(null);
     setIsLoading(true);
     try {
-      const redirectTo = `${window.location.origin}/auth/callback`;
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        flowType: 'pkce',
         options: {
-          redirectTo,
+          redirectTo: `${window.location.origin}/dashboard`,
         },
       });
 
