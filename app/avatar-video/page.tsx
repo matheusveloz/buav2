@@ -93,12 +93,39 @@ export default async function AvatarVideoPage() {
           avatarLabel: 'Avatar',
         })) ?? [];
 
+  // Buscar áudios do usuário
+  const { data: userAudioRows, error: userAudiosError } = await supabase
+    .from('user_audios')
+    .select('id, audio_url, original_filename, extension, created_at')
+    .eq('user_email', user.email)
+    .order('created_at', { ascending: false });
+
+  const isUserAudiosTableMissing =
+    userAudiosError?.code === '42P01' ||
+    userAudiosError?.message?.toLowerCase().includes('user_audios');
+
+  if (userAudiosError && !isUserAudiosTableMissing) {
+    console.error('Erro ao carregar áudios do usuário:', userAudiosError.message);
+  }
+
+  const userAudios =
+    isUserAudiosTableMissing
+      ? []
+      : (userAudioRows ?? [])
+          .map((row) => ({
+            id: row.id,
+            name: row.original_filename ?? 'Áudio',
+            url: row.audio_url ?? '',
+          }))
+          .filter((audio) => audio.url.length > 0);
+
   return (
     <AvatarVideoClient
       initialProfile={initialProfile}
       userEmail={user.email}
       builtinAvatars={builtinAvatars}
       userAvatars={userAvatars}
+      userAudios={userAudios}
       initialHistory={history}
     />
   );

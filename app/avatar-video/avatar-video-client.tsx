@@ -46,6 +46,7 @@ interface AvatarVideoClientProps {
   userEmail: string;
   builtinAvatars: AvatarOption[];
   userAvatars: AvatarOption[];
+  userAudios: AudioItem[];
   initialHistory: HistoryItem[];
 }
 
@@ -62,12 +63,13 @@ export default function AvatarVideoClient({
   userEmail,
   builtinAvatars,
   userAvatars,
+  userAudios,
   initialHistory,
 }: AvatarVideoClientProps) {
   const [uploadedAvatars, setUploadedAvatars] = useState<AvatarOption[]>(userAvatars);
   const [selectedEntries, setSelectedEntries] = useState<AvatarEntry[]>([]);
   const [activeEntryId, setActiveEntryId] = useState<string | null>(null);
-  const [audioLibrary, setAudioLibrary] = useState<AudioItem[]>([]);
+  const [audioLibrary, setAudioLibrary] = useState<AudioItem[]>(userAudios);
   const [history, setHistory] = useState<HistoryItem[]>(initialHistory);
 
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
