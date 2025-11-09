@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { createSupabaseServerClient } from '@/lib/supabase-server';
 import { saveAudioFile, resolveFileExtension } from '@/lib/file-storage';
-import { DEFAULT_AUDIO_BUCKET, getAudioBucket, shouldUseSupabaseStorage } from '@/lib/audio-config';
+import { getAudioBucket, shouldUseSupabaseStorage } from '@/lib/audio-config';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -77,11 +77,20 @@ export async function POST(request: NextRequest) {
       });
 
       if (uploadError) {
-        console.error('Erro ao enviar áudio para Supabase Storage', uploadError);
+        console.error('Erro ao enviar áudio para Supabase Storage', {
+          message: uploadError.message,
+          name: uploadError.name,
+          cause: uploadError.cause,
+          bucket,
+          storagePath,
+          fileSize: buffer.length,
+          contentType,
+        });
         return NextResponse.json(
           {
             error: 'Falha ao salvar áudio no armazenamento',
-            details: uploadError.message ?? null,
+            details: uploadError.message ?? 'Erro desconhecido no Storage',
+            errorName: uploadError.name ?? null,
           },
           { status: 500 }
         );
