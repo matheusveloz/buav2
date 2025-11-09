@@ -32,7 +32,6 @@ export async function GET(_request: NextRequest) {
           ? {
               message: listResult.error.message,
               name: listResult.error.name,
-              statusCode: listResult.error.statusCode,
             }
           : null,
         sampleCount: listResult.data?.length ?? 0,
