@@ -2,17 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { createSupabaseServerClient } from '@/lib/supabase-server';
 import { saveAudioFile, resolveFileExtension } from '@/lib/file-storage';
+import { DEFAULT_AUDIO_BUCKET, getAudioBucket, shouldUseSupabaseStorage } from '@/lib/audio-config';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-const DEFAULT_AUDIO_BUCKET = 'audio';
-
-function shouldUseSupabaseStorage() {
-  if (process.env.AUDIO_STORAGE_DRIVER === 'fs') return false;
-  if (process.env.AUDIO_STORAGE_DRIVER === 'supabase') return true;
-  return Boolean(process.env.VERCEL);
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -70,7 +63,7 @@ export async function POST(request: NextRequest) {
     };
 
     if (shouldUseSupabaseStorage()) {
-      const bucket = process.env.NEXT_PUBLIC_SUPABASE_AUDIO_BUCKET?.trim() || DEFAULT_AUDIO_BUCKET;
+      const bucket = getAudioBucket();
       const extension = resolveFileExtension(file.name, 'mp3');
       const fileId = randomUUID();
       const storagePath = `${user.id}/${fileId}.${extension}`;
