@@ -17,7 +17,7 @@ export default async function DebugPage() {
 
   // Verificar variáveis de ambiente
   const envVars = {
-    NEWPORT_API_KEY: process.env.NEWPORT_API_KEY ? '✓ Configurado' : '✗ Ausente',
+    NEXT_PUBLIC_NEWPORT_API_KEY: process.env.NEXT_PUBLIC_NEWPORT_API_KEY ? '✓ Configurado' : '✗ Ausente',
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ? '✓ Configurado' : '✗ Ausente',
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? '✓ Configurado' : '✗ Ausente',
     NEXT_PUBLIC_SUPABASE_AUDIO_BUCKET: process.env.NEXT_PUBLIC_SUPABASE_AUDIO_BUCKET || 'audio (padrão)',
@@ -178,10 +178,10 @@ export default async function DebugPage() {
           <h2 className="mb-4 text-lg font-semibold text-gray-900">🎬 API Newport (LipSync)</h2>
           <div className="space-y-2">
             <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-              <span className="text-sm font-medium text-gray-700">NEWPORT_API_KEY</span>
-              <span className={`text-sm ${process.env.NEWPORT_API_KEY ? 'text-green-600' : 'text-red-600'}`}>
-                {process.env.NEWPORT_API_KEY ? (
-                  <>✓ Configurado ({process.env.NEWPORT_API_KEY.slice(0, 8)}...)</>
+              <span className="text-sm font-medium text-gray-700">NEXT_PUBLIC_NEWPORT_API_KEY</span>
+              <span className={`text-sm ${process.env.NEXT_PUBLIC_NEWPORT_API_KEY ? 'text-green-600' : 'text-red-600'}`}>
+                {process.env.NEXT_PUBLIC_NEWPORT_API_KEY ? (
+                  <>✓ Configurado ({process.env.NEXT_PUBLIC_NEWPORT_API_KEY.slice(0, 8)}...)</>
                 ) : (
                   '✗ Ausente - Configure esta variável!'
                 )}
@@ -217,7 +217,7 @@ export default async function DebugPage() {
           <h3 className="mb-2 font-semibold text-amber-900">⚠️ Como corrigir erros</h3>
           <ul className="space-y-2 text-sm text-amber-800">
             <li>
-              <strong>NEWPORT_API_KEY ausente:</strong> Adicione a variável no Vercel (Settings → Environment Variables)
+              <strong>NEXT_PUBLIC_NEWPORT_API_KEY ausente:</strong> Adicione a variável no Vercel (Settings → Environment Variables)
             </li>
             <li>
               <strong>Bucket não encontrado:</strong> Crie os buckets 'audio' e 'avatars' no Supabase Storage

@@ -39,10 +39,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    const apiKey = process.env.NEWPORT_API_KEY;
+    const apiKey = process.env.NEXT_PUBLIC_NEWPORT_API_KEY;
 
     if (!apiKey) {
-      console.error('NEWPORT_API_KEY não configurada');
+      console.error('NEXT_PUBLIC_NEWPORT_API_KEY não configurada');
       return NextResponse.json({ error: 'Configuração de API ausente' }, { status: 500 });
     }
 
