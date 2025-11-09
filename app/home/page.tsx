@@ -1,68 +1,38 @@
-'use client';
+import { redirect } from 'next/navigation';
+import HomeClient from './home-client';
+import { buildInitialProfile } from '@/lib/profile';
+import { createSupabaseServerClient } from '@/lib/supabase-server';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
-export default function HomeDashboard() {
-  const router = useRouter();
-  const [email, setEmail] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+export default async function HomePage() {
+  const supabase = await createSupabaseServerClient();
 
-  useEffect(() => {
-    const loadUser = async () => {
-      const {
-        data: { user },
-        error,
-      } = await supabase.auth.getUser();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
 
-      if (error || !user) {
-        router.replace('/login');
-        return;
-      }
+  if (userError) {
+    console.error('Erro ao obter usuário autenticado:', userError.message);
+  }
 
-      setEmail(user.email ?? null);
-      setIsLoading(false);
-    };
+  if (!user || !user.email) {
+    redirect('/login');
+  }
 
-    void loadUser();
-  }, [router]);
+  const { data: profile, error: profileError } = await supabase
+    .from('emails')
+    .select('plano, creditos, creditos_extras')
+    .eq('email', user.email)
+    .maybeSingle();
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    router.replace('/');
-  };
+  if (profileError) {
+    console.error('Erro ao carregar perfil do usuário:', profileError.message);
+  }
 
-  return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-black px-6 py-12 text-center text-white">
-      <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-white/5 p-10 shadow-2xl backdrop-blur">
-        {isLoading ? (
-          <>
-            <div className="relative mx-auto h-10 w-10 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-            <p className="mt-6 text-sm text-white/70">
-              Carregando suas informações...
-            </p>
-          </>
-        ) : (
-          <>
-            <h1 className="text-3xl font-bold">Home BUUA</h1>
-            <p className="mt-4 text-sm text-white/70">
-              Seja bem-vindo(a) à nova BUUA v2.
-            </p>
-            <p className="mt-2 text-lg font-semibold text-white">
-              {email ?? 'Conta sem email definido'}
-            </p>
-            <button
-              type="button"
-              onClick={handleSignOut}
-              className="mt-10 inline-flex items-center justify-center gap-2 rounded-full border border-white px-6 py-3 text-sm font-semibold text-white transition hover:bg-white hover:text-black"
-            >
-              Sair
-            </button>
-          </>
-        )}
-      </div>
-    </main>
-  );
+  const initialProfile = buildInitialProfile(profile);
+
+  return <HomeClient initialProfile={initialProfile} userEmail={user.email} />;
 }
-

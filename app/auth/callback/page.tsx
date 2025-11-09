@@ -1,105 +1,140 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
+const CALLBACK_PATH = '/auth/callback';
+const HOME_DELAY_MS = 500;
+
 export default function AuthCallbackPage() {
   const router = useRouter();
-  const [status, setStatus] = useState<'loading' | 'error'>('loading');
-  const [message, setMessage] = useState('Confirmando sua conta...');
+  const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const exchangeSession = async () => {
-      try {
-        // Para lidar com o token no hash, usamos setSession
-        const hashParams = new URLSearchParams(
-          window.location.hash.substring(1),
-        );
-        const accessToken = hashParams.get('access_token');
-        const refreshToken = hashParams.get('refresh_token');
+    let isMounted = true;
 
-        let session = null;
-
-        if (accessToken && refreshToken) {
-          // Fluxo implícito - seta a sessão manualmente
-          const { data, error } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-          if (error) {
-            throw error;
-          }
-          session = data.session;
-
-          // Limpa o hash da URL
-          const cleanUrl = `${window.location.origin}${window.location.pathname}`;
-          window.history.replaceState({}, document.title, cleanUrl);
-        } else {
-          // Fluxo PKCE com código
-          const { data, error } = await supabase.auth.exchangeCodeForSession(
-            window.location.href,
-          );
-          if (error) {
-            throw error;
-          }
-          session = data.session;
-        }
-
-        if (!session) {
-          throw new Error('Sessão inválida recebida do Supabase.');
-        }
-
-        const userEmail = session.user?.email;
-
-        if (userEmail) {
-          const { error: upsertError } = await supabase
-            .from('emails')
-            .upsert(
-              { email: userEmail },
-              {
-                onConflict: 'email',
-              },
-            );
-
-          if (upsertError) {
-            console.error('Erro ao salvar email no Supabase:', upsertError);
-          }
-        }
-
-        router.replace('/home');
-      } catch (error) {
-        setStatus('error');
-        const readableMessage =
-          error instanceof Error
-            ? error.message
-            : 'Não foi possível confirmar sua sessão. Tente novamente.';
-        setMessage(readableMessage);
-
-        setTimeout(() => {
-          router.replace('/login');
-        }, 3000);
+    const scheduleRedirect = (path: string, delay = 0) => {
+      if (!isMounted) return;
+      if (redirectTimerRef.current) {
+        clearTimeout(redirectTimerRef.current);
+        redirectTimerRef.current = null;
+      }
+      if (delay > 0) {
+        redirectTimerRef.current = setTimeout(() => {
+          router.replace(path);
+        }, delay);
+      } else {
+        router.replace(path);
       }
     };
 
-    void exchangeSession();
+    const cleanupUrl = () => {
+      if (window.location.pathname === CALLBACK_PATH && (window.location.search || window.location.hash)) {
+        window.history.replaceState(null, '', CALLBACK_PATH);
+      }
+    };
+
+    const redirectHome = () => {
+      cleanupUrl();
+      scheduleRedirect('/home', HOME_DELAY_MS);
+    };
+
+    const redirectWithError = (message: string) => {
+      cleanupUrl();
+      scheduleRedirect(`/login?error=${encodeURIComponent(message)}`);
+    };
+
+    const finalizeAuth = async () => {
+      try {
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
+
+        if (sessionError) {
+          console.error('auth/callback: erro ao verificar sessão atual', sessionError.message);
+        }
+
+        if (session) {
+          redirectHome();
+          return;
+        }
+
+        const hashParams = new URLSearchParams(window.location.hash.startsWith('#') ? window.location.hash.slice(1) : '');
+        const searchParams = new URLSearchParams(window.location.search);
+
+        const errorMessage =
+          hashParams.get('error_description') ||
+          searchParams.get('error_description') ||
+          hashParams.get('error') ||
+          searchParams.get('error');
+
+        if (errorMessage) {
+          redirectWithError(errorMessage);
+          return;
+        }
+
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
+
+        if (accessToken && refreshToken) {
+          cleanupUrl();
+          const { error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+
+          if (error) {
+            redirectWithError(error.message || 'Não foi possível concluir o login.');
+            return;
+          }
+
+          redirectHome();
+          return;
+        }
+
+        const authCode = searchParams.get('code');
+
+        if (authCode) {
+          const { error } = await supabase.auth.exchangeCodeForSession(authCode);
+
+          cleanupUrl();
+
+          if (error) {
+            redirectWithError(error.message || 'Não foi possível concluir o login.');
+            return;
+          }
+
+          redirectHome();
+          return;
+        }
+
+        redirectWithError('Retorno de autenticação inválido. Tente novamente.');
+      } catch (error) {
+        redirectWithError(error instanceof Error ? error.message : 'Não foi possível concluir o login.');
+      }
+    };
+
+    void finalizeAuth();
+
+    return () => {
+      isMounted = false;
+      if (redirectTimerRef.current) {
+        clearTimeout(redirectTimerRef.current);
+        redirectTimerRef.current = null;
+      }
+    };
   }, [router]);
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-black px-6 py-12 text-center text-white">
-      <div className="max-w-md space-y-4">
-        <div className="relative h-10 w-10 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-        <h1 className="text-2xl font-semibold">
-          {status === 'loading' ? 'Conectando...' : 'Ops! Algo deu errado'}
-        </h1>
-        <p className="text-sm text-white/70">{message}</p>
-        {status === 'error' ? (
-          <p className="text-xs text-white/50">
-            Você será redirecionado para tentar novamente.
-          </p>
-        ) : null}
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-white">
+      <div className="text-center">
+        <div className="animate-pulse">
+          <h1 className="text-2xl font-bold text-gray-800">Entrando...</h1>
+        </div>
       </div>
-    </main>
+    </div>
   );
 }
 
