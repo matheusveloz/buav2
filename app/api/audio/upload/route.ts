@@ -82,7 +82,6 @@ export async function POST(request: NextRequest) {
           {
             error: 'Falha ao salvar áudio no armazenamento',
             details: uploadError.message ?? null,
-            status: uploadError.status ?? null,
           },
           { status: 500 }
         );
