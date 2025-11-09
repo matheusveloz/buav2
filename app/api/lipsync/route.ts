@@ -11,7 +11,6 @@ type LipsyncRequestBody = {
     video_width: number;
     video_height: number;
     video_enhance: number;
-    fps: string;
   }>;
 };
 
