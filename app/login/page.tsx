@@ -40,6 +40,42 @@ export default function LoginPage() {
   useEffect(() => {
     let isMounted = true;
 
+    const redirectIfAuthParamsPresent = () => {
+      if (typeof window === 'undefined') return false;
+
+      const searchParams = new URLSearchParams(window.location.search);
+      const hashParams = new URLSearchParams(
+        window.location.hash.startsWith('#') ? window.location.hash.slice(1) : ''
+      );
+
+      const hasAuthParams =
+        searchParams.has('code') ||
+        searchParams.has('error') ||
+        searchParams.has('error_description') ||
+        searchParams.has('access_token') ||
+        searchParams.has('refresh_token') ||
+        hashParams.has('access_token') ||
+        hashParams.has('refresh_token') ||
+        hashParams.has('code') ||
+        hashParams.has('error') ||
+        hashParams.has('error_description');
+
+      if (!hasAuthParams) {
+        return false;
+      }
+
+      setIsLoading(true);
+      const nextUrl = `/auth/callback${window.location.search}${window.location.hash}`;
+      router.replace(nextUrl);
+      return true;
+    };
+
+    if (redirectIfAuthParamsPresent()) {
+      return () => {
+        isMounted = false;
+      };
+    }
+
     const bootstrap = async () => {
       if (!isMounted) return;
 
@@ -58,7 +94,7 @@ export default function LoginPage() {
     return () => {
       isMounted = false;
     };
-  }, [checkExistingSession]);
+  }, [checkExistingSession, router]);
 
   const getOAuthRedirectTo = () => {
     const fallbackBaseUrl =
