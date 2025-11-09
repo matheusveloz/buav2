@@ -78,7 +78,14 @@ export async function POST(request: NextRequest) {
 
       if (uploadError) {
         console.error('Erro ao enviar áudio para Supabase Storage', uploadError);
-        return NextResponse.json({ error: 'Falha ao salvar áudio no armazenamento' }, { status: 500 });
+        return NextResponse.json(
+          {
+            error: 'Falha ao salvar áudio no armazenamento',
+            details: uploadError.message ?? null,
+            status: uploadError.status ?? null,
+          },
+          { status: 500 }
+        );
       }
 
       const { data: publicUrlResult } = supabase.storage.from(bucket).getPublicUrl(storagePath);
@@ -142,6 +149,12 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error('Erro inesperado ao enviar áudio', error);
-    return NextResponse.json({ error: 'Erro interno ao enviar áudio' }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: 'Erro interno ao enviar áudio',
+        details: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 }
+    );
   }
 }
