@@ -168,16 +168,27 @@ export async function POST(request: Request) {
       );
     }
 
-    const buffer = await videoResponse.arrayBuffer();
-    const extension = videoType.replace(/^\./, '') || 'mp4';
-    const { publicPath } = await saveVideoBuffer(taskId, buffer, extension);
+    // Em produção (Vercel), não salvamos localmente - usamos apenas a URL remota
+    let localPath: string | null = null;
+    
+    if (!process.env.VERCEL) {
+      // Apenas em desenvolvimento local salva o vídeo
+      try {
+        const buffer = await videoResponse.arrayBuffer();
+        const extension = videoType.replace(/^\./, '') || 'mp4';
+        const { publicPath } = await saveVideoBuffer(taskId, buffer, extension);
+        localPath = publicPath;
+      } catch (saveError) {
+        console.warn('Não foi possível salvar vídeo localmente (esperado no Vercel)', saveError);
+      }
+    }
 
     const updateResult = await supabase
       .from('videos')
       .update({
         status: 'completed',
         remote_video_url: videoUrl,
-        local_video_path: publicPath,
+        local_video_path: localPath,
         creditos_utilizados: creditsUsed,
         failure_reason: null,
         updated_at: new Date().toISOString(),
@@ -202,15 +213,22 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       status: 'completed',
-      videoUrl: publicPath,
+      videoUrl: localPath || videoUrl,
       remoteVideoUrl: videoUrl,
       durationSeconds,
       creditsUsed,
       record: updatedRecord ?? null,
     });
   } catch (error) {
-    console.error('Erro inesperado ao consultar task de LipSync', error);
-    return NextResponse.json({ error: 'Erro interno ao consultar task' }, { status: 500 });
+    console.error('Erro inesperado ao consultar task de LipSync', {
+      error,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    return NextResponse.json({ 
+      error: 'Erro interno ao consultar task',
+      details: error instanceof Error ? error.message : 'Erro desconhecido',
+    }, { status: 500 });
   }
 }
 
