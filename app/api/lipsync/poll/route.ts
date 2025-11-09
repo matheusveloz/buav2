@@ -168,18 +168,42 @@ export async function POST(request: Request) {
       );
     }
 
-    // Em produção (Vercel), não salvamos localmente - usamos apenas a URL remota
-    let localPath: string | null = null;
+    // Baixar o vídeo e salvar no Supabase Storage
+    const buffer = await videoResponse.arrayBuffer();
+    const extension = videoType.replace(/^\./, '') || 'mp4';
     
-    if (!process.env.VERCEL) {
-      // Apenas em desenvolvimento local salva o vídeo
-      try {
-        const buffer = await videoResponse.arrayBuffer();
-        const extension = videoType.replace(/^\./, '') || 'mp4';
-        const { publicPath } = await saveVideoBuffer(taskId, buffer, extension);
-        localPath = publicPath;
-      } catch (saveError) {
-        console.warn('Não foi possível salvar vídeo localmente (esperado no Vercel)', saveError);
+    let ourVideoUrl: string | null = null;
+    let localPath: string | null = null;
+
+    // Tentar salvar no Supabase Storage
+    const videoBucket = process.env.NEXT_PUBLIC_SUPABASE_VIDEO_BUCKET?.trim() || 'videos';
+    const storagePath = `${user.id}/${taskId}.${extension}`;
+    
+    const { error: uploadError } = await supabase.storage
+      .from(videoBucket)
+      .upload(storagePath, Buffer.from(buffer), {
+        cacheControl: '3600',
+        contentType: 'video/mp4',
+        upsert: false,
+      });
+
+    if (uploadError) {
+      console.warn('Não foi possível salvar vídeo no Supabase Storage, usando URL remota', uploadError);
+      // Se falhar no storage, usa a URL remota
+      ourVideoUrl = videoUrl;
+    } else {
+      // Sucesso: usar nossa URL do Supabase
+      const { data: publicUrlResult } = supabase.storage.from(videoBucket).getPublicUrl(storagePath);
+      ourVideoUrl = publicUrlResult.publicUrl;
+      
+      // Também tentar salvar localmente se não estiver no Vercel
+      if (!process.env.VERCEL) {
+        try {
+          const { publicPath } = await saveVideoBuffer(taskId, buffer, extension);
+          localPath = publicPath;
+        } catch (saveError) {
+          console.warn('Não foi possível salvar localmente', saveError);
+        }
       }
     }
 
@@ -187,7 +211,7 @@ export async function POST(request: Request) {
       .from('videos')
       .update({
         status: 'completed',
-        remote_video_url: videoUrl,
+        remote_video_url: ourVideoUrl || videoUrl,
         local_video_path: localPath,
         creditos_utilizados: creditsUsed,
         failure_reason: null,
@@ -213,8 +237,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       status: 'completed',
-      videoUrl: localPath || videoUrl,
-      remoteVideoUrl: videoUrl,
+      videoUrl: localPath || ourVideoUrl || videoUrl,
+      remoteVideoUrl: ourVideoUrl || videoUrl,
       durationSeconds,
       creditsUsed,
       record: updatedRecord ?? null,

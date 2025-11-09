@@ -10,6 +10,8 @@ import {
   DragEvent,
 } from 'react';
 import Link from 'next/link';
+import Plyr from 'plyr-react';
+import 'plyr-react/plyr.css';
 import { AuthenticatedShell } from '@/components/authenticated-shell';
 import type { Profile } from '@/lib/profile';
 import type { AvatarLibraryItem } from '@/lib/avatar-library';
@@ -609,65 +611,6 @@ export default function AvatarVideoClient({
             </div>
           ) : (
             <>
-              {activeEntry ? (
-                <div className="space-y-3">
-                  <div
-                    className="group relative overflow-hidden rounded-3xl border border-gray-200 bg-gray-900/80"
-                    onDrop={handleAudioDrop}
-                    onDragOver={(event) => event.preventDefault()}
-                  >
-                    <div className="aspect-video w-full">
-                      <video
-                        key={previewSource}
-                        src={previewSource}
-                        muted
-                        loop
-                        autoPlay
-                        playsInline
-                        className="h-full w-full object-contain"
-                      />
-                    </div>
-                    <div className="pointer-events-none absolute inset-0 hidden place-items-center bg-black/60 text-white transition group-hover:grid">
-                      <span className="rounded-full bg-white/10 px-4 py-2 text-xs font-medium uppercase tracking-widest">
-                        Solte o áudio aqui
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-gray-50 px-4 py-3">
-                    <div className="grow">
-                      <p className="text-sm font-semibold text-gray-900">{activeEntry.avatar.label}</p>
-                      <p className="text-xs text-gray-500">
-                        Áudio:{' '}
-                        {activeEntry.audio ? (
-                            <span className="font-medium text-gray-700">
-                              {truncateText(activeEntry.audio.name, 40)}
-                            </span>
-                        ) : (
-                          <span className="italic text-gray-400">não atribuído</span>
-                        )}
-                      </p>
-                    </div>
-                    {activeEntry.status !== 'idle' ? (
-                      <span
-                        className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
-                          activeEntry.status === 'completed'
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : activeEntry.status === 'failed'
-                              ? 'bg-red-100 text-red-600'
-                              : 'bg-yellow-100 text-yellow-700'
-                        }`}
-                      >
-                        {activeEntry.status === 'completed'
-                          ? 'Concluído'
-                          : activeEntry.status === 'failed'
-                            ? 'Falhou'
-                            : 'Processando'}
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-              ) : null}
-
               {selectedEntries.length > 1 ? (
                 <div className="space-y-2">
                   <p className="text-xs font-semibold uppercase tracking-widest text-gray-500">Avatares em foco</p>
@@ -928,22 +871,24 @@ export default function AvatarVideoClient({
                   key={item.id}
                   className="flex h-full flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition hover:shadow-md"
                 >
-                  <div className="relative aspect-video w-full bg-gray-100">
-                    {item.localVideoPath ? (
-                      <video
-                        src={item.localVideoPath}
-                        muted
-                        loop
-                        playsInline
-                        className="h-full w-full object-cover"
-                      />
-                    ) : item.remoteVideoUrl ? (
-                      <video
-                        src={item.remoteVideoUrl}
-                        muted
-                        loop
-                        playsInline
-                        className="h-full w-full object-cover"
+                  <div className="relative aspect-video w-full bg-gray-900">
+                    {item.localVideoPath || item.remoteVideoUrl ? (
+                      <Plyr
+                        source={{
+                          type: 'video',
+                          sources: [
+                            {
+                              src: item.localVideoPath || item.remoteVideoUrl || '',
+                              type: 'video/mp4',
+                            },
+                          ],
+                        }}
+                        options={{
+                          controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'fullscreen'],
+                          ratio: '16:9',
+                          hideControls: true,
+                          clickToPlay: true,
+                        }}
                       />
                     ) : (
                       <div className="flex h-full items-center justify-center text-xs text-gray-400">
@@ -951,7 +896,7 @@ export default function AvatarVideoClient({
                       </div>
                     )}
                     <span
-                      className={`absolute left-3 top-3 inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                      className={`absolute left-3 top-3 z-10 inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
                         item.status === 'completed'
                           ? 'bg-emerald-500/90 text-white'
                           : item.status === 'failed'
@@ -969,7 +914,7 @@ export default function AvatarVideoClient({
                   <div className="flex flex-1 flex-col gap-3 p-4">
                     <div>
                       <p className="text-sm font-semibold text-gray-900">
-                        Task {item.taskId.slice(0, 8)}...
+                        Vídeo #{item.id.slice(0, 8).toUpperCase()}
                       </p>
                       <p className="text-xs text-gray-500">{formatDateTime(item.createdAt)}</p>
                       {item.avatarLabel ? (
