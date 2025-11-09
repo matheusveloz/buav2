@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
-import { NextRequest } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase-server';
 import { saveAudioFile, resolveFileExtension } from '@/lib/file-storage';
 
@@ -35,6 +34,41 @@ export async function POST(request: NextRequest) {
 
     const arrayBuffer = await file.arrayBuffer();
 
+    const insertAudioRecord = async (
+      payload: Partial<{
+        id: string;
+        audio_url: string;
+        storage_bucket: string | null;
+        storage_path: string | null;
+        original_filename: string | null;
+        extension: string | null;
+      }>
+    ) => {
+      const { data: inserted, error: insertError } = await supabase
+        .from('user_audios')
+        .insert({
+          id: payload.id,
+          user_email: user.email,
+          audio_url: payload.audio_url,
+          storage_bucket: payload.storage_bucket ?? null,
+          storage_path: payload.storage_path ?? null,
+          original_filename: payload.original_filename ?? null,
+          extension: payload.extension ?? null,
+        })
+        .select('*')
+        .maybeSingle();
+
+      if (insertError || !inserted) {
+        console.error('Erro ao registrar áudio do usuário', insertError);
+        return NextResponse.json(
+          { error: 'Áudio salvo, mas falhou ao registrar no banco.' },
+          { status: 500 }
+        );
+      }
+
+      return inserted;
+    };
+
     if (shouldUseSupabaseStorage()) {
       const bucket = process.env.NEXT_PUBLIC_SUPABASE_AUDIO_BUCKET?.trim() || DEFAULT_AUDIO_BUCKET;
       const extension = resolveFileExtension(file.name, 'mp3');
@@ -57,16 +91,29 @@ export async function POST(request: NextRequest) {
       const { data: publicUrlResult } = supabase.storage.from(bucket).getPublicUrl(storagePath);
       const publicUrl = publicUrlResult.publicUrl;
 
+      const inserted = await insertAudioRecord({
+        id: fileId,
+        audio_url: publicUrl,
+        storage_bucket: bucket,
+        storage_path: storagePath,
+        original_filename: file.name,
+        extension,
+      });
+
+      if (!inserted) {
+        return NextResponse.json({ error: 'Erro interno ao registrar áudio' }, { status: 500 });
+      }
+
       return NextResponse.json(
         {
           audio: {
-            id: fileId,
-            url: publicUrl,
-            name: file.name,
-            extension,
+            id: inserted.id,
+            url: inserted.audio_url,
+            name: inserted.original_filename ?? file.name,
+            extension: inserted.extension ?? extension,
             type: 'upload' as const,
-            storageBucket: bucket,
-            storagePath,
+            storageBucket: inserted.storage_bucket ?? bucket,
+            storagePath: inserted.storage_path ?? storagePath,
           },
         },
         { status: 201 }
@@ -75,13 +122,26 @@ export async function POST(request: NextRequest) {
 
     const { fileId, publicPath, extension } = await saveAudioFile(arrayBuffer, file.name);
 
+    const inserted = await insertAudioRecord({
+      id: fileId,
+      audio_url: publicPath,
+      storage_bucket: null,
+      storage_path: null,
+      original_filename: file.name,
+      extension,
+    });
+
+    if (!inserted) {
+      return NextResponse.json({ error: 'Erro interno ao registrar áudio' }, { status: 500 });
+    }
+
     return NextResponse.json(
       {
         audio: {
-          id: fileId,
-          url: publicPath,
-          name: file.name,
-          extension,
+          id: inserted.id,
+          url: inserted.audio_url,
+          name: inserted.original_filename ?? file.name,
+          extension: inserted.extension ?? extension,
           type: 'upload' as const,
         },
       },
