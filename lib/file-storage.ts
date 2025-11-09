@@ -24,7 +24,7 @@ export async function ensureAudioUploadsDir() {
   await ensureDirectory(AUDIO_UPLOADS_DIR);
 }
 
-function normaliseExtension(name: string, fallback: string) {
+export function resolveFileExtension(name: string, fallback: string) {
   const ext = extname(name || '').replace('.', '').trim();
   return ext.length > 0 ? ext : fallback;
 }
@@ -47,7 +47,7 @@ export async function saveAvatarFile(file: ArrayBuffer, originalName: string) {
   await ensureAvatarUploadsDir();
 
   const fileId = randomUUID();
-  const ext = normaliseExtension(originalName, 'mp4');
+  const ext = resolveFileExtension(originalName, 'mp4');
   const fileName = `${fileId}.${ext}`;
   const filePath = join(AVATAR_UPLOADS_DIR, fileName);
 
@@ -62,7 +62,7 @@ export async function saveAudioFile(file: ArrayBuffer, originalName: string) {
   await ensureAudioUploadsDir();
 
   const fileId = randomUUID();
-  const ext = normaliseExtension(originalName, 'mp3');
+  const ext = resolveFileExtension(originalName, 'mp3');
   const fileName = `${fileId}.${ext}`;
   const filePath = join(AUDIO_UPLOADS_DIR, fileName);
 
