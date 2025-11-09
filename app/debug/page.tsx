@@ -30,9 +30,11 @@ export default async function DebugPage() {
   // Testar conexão com buckets
   const audioBucket = process.env.NEXT_PUBLIC_SUPABASE_AUDIO_BUCKET || 'audio';
   const avatarBucket = process.env.NEXT_PUBLIC_SUPABASE_AVATAR_BUCKET || 'avatars';
+  const videoBucket = process.env.NEXT_PUBLIC_SUPABASE_VIDEO_BUCKET || 'videos';
 
   const audioStorageTest = await supabase.storage.from(audioBucket).list('', { limit: 1 });
   const avatarStorageTest = await supabase.storage.from(avatarBucket).list('', { limit: 1 });
+  const videoStorageTest = await supabase.storage.from(videoBucket).list('', { limit: 1 });
 
   // Testar acesso às tabelas
   const userAvatarsTest = await supabase
@@ -109,6 +111,18 @@ export default async function DebugPage() {
                 <p className="text-sm">
                   Status: {avatarStorageTest.error ? (
                     <span className="text-red-600">✗ Erro - {avatarStorageTest.error.message}</span>
+                  ) : (
+                    <span className="text-green-600">✓ OK</span>
+                  )}
+                </p>
+              </div>
+            </div>
+            <div>
+              <h3 className="mb-2 font-medium text-gray-800">Bucket: {videoBucket}</h3>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-sm">
+                  Status: {videoStorageTest.error ? (
+                    <span className="text-red-600">✗ Erro - {videoStorageTest.error.message}</span>
                   ) : (
                     <span className="text-green-600">✓ OK</span>
                   )}

@@ -24,3 +24,35 @@ body {
   background: var(--background);
   color: var(--foreground);
 }
+
+/* Customização do Plyr com cores verdes */
+.plyr--video {
+  --plyr-color-main: #10b981; /* emerald-500 */
+}
+
+.plyr--full-ui input[type=range] {
+  color: #10b981;
+}
+
+.plyr__control--overlaid {
+  background: linear-gradient(to right, #10b981, #059669);
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+}
+
+.plyr__control--overlaid:hover {
+  background: linear-gradient(to right, #059669, #047857);
+}
+
+.plyr__control.plyr__tab-focus,
+.plyr__control:hover,
+.plyr__control[aria-expanded=true] {
+  background: #10b981;
+}
+
+.plyr__menu__container .plyr__control[role=menuitemradio][aria-checked=true]::before {
+  background: #10b981;
+}
+
+.plyr--video .plyr__controls {
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+}

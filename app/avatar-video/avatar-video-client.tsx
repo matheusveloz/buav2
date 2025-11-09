@@ -73,6 +73,8 @@ export default function AvatarVideoClient({
   const [activeEntryId, setActiveEntryId] = useState<string | null>(null);
   const [audioLibrary, setAudioLibrary] = useState<AudioItem[]>(userAudios);
   const [history, setHistory] = useState<HistoryItem[]>(initialHistory);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 6;
 
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
   const [avatarModalSelection, setAvatarModalSelection] = useState<Set<string>>(new Set());
@@ -508,6 +510,14 @@ export default function AvatarVideoClient({
     return value.length <= maxLength ? value : `${value.slice(0, maxLength - 3)}...`;
   }, []);
 
+  const paginatedHistory = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return history.slice(startIndex, endIndex);
+  }, [history, currentPage]);
+
+  const totalPages = Math.ceil(history.length / itemsPerPage);
+
   return (
     <AuthenticatedShell initialProfile={initialProfile} userEmail={userEmail}>
       <div className="space-y-8">
@@ -611,63 +621,6 @@ export default function AvatarVideoClient({
             </div>
           ) : (
             <>
-              {selectedEntries.length > 1 ? (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-gray-500">Avatares em foco</p>
-                  <div className="flex gap-3 overflow-x-auto pb-2">
-                    {selectedEntries.map((entry) => {
-                      const isActive = entry.id === activeEntryId;
-                      return (
-                        <button
-                          key={`quick-${entry.id}`}
-                          type="button"
-                          onClick={() => setActiveEntryId(entry.id)}
-                          className={`group/quick relative flex min-w-[140px] items-center gap-3 rounded-2xl border px-3 py-2 text-left transition ${
-                            isActive
-                              ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
-                              : 'border-gray-200 bg-white hover:border-emerald-200 hover:text-emerald-600'
-                          }`}
-                        >
-                          <span className="relative flex h-12 w-12 overflow-hidden rounded-xl bg-gray-900">
-                            <video
-                              src={entry.avatar.videoUrl}
-                              muted
-                              loop
-                              autoPlay
-                              playsInline
-                              className="h-full w-full object-contain"
-                            />
-                            {entry.status !== 'idle' ? (
-                              <span
-                                className={`absolute -bottom-1 right-1 inline-flex items-center rounded-full px-2 py-[2px] text-[10px] font-semibold text-white shadow ${
-                                  entry.status === 'completed'
-                                    ? 'bg-emerald-500'
-                                    : entry.status === 'failed'
-                                      ? 'bg-red-500'
-                                      : 'bg-yellow-500'
-                                }`}
-                              >
-                                {entry.status === 'completed'
-                                  ? 'OK'
-                                  : entry.status === 'failed'
-                                    ? 'Falhou'
-                                    : 'Gerando'}
-                              </span>
-                            ) : null}
-                          </span>
-                          <span className="flex min-w-0 flex-col">
-                            <span className="truncate text-xs font-semibold">{entry.avatar.label}</span>
-                            <span className="truncate text-[11px] text-gray-500">
-                              {entry.audio ? truncateText(entry.audio.name, 28) : 'Sem áudio'}
-                            </span>
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : null}
-
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {selectedEntries.map((entry) => {
                   const isActive = entry.id === activeEntryId;
@@ -782,8 +735,11 @@ export default function AvatarVideoClient({
                               setIsAudioModalOpen(true);
                               setErrorMessage(null);
                             }}
-                            className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:border-emerald-200 hover:text-emerald-600"
+                            className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-emerald-200 hover:text-emerald-600"
                           >
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 19V6l12-2v13M9 10l12-2" />
+                            </svg>
                             Biblioteca
                           </button>
                           <button
@@ -795,9 +751,12 @@ export default function AvatarVideoClient({
                               setErrorMessage(null);
                             }}
                             disabled={isUploadingAudio}
-                            className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-emerald-500 to-green-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
+                            className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-emerald-500 to-green-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            {isUploadingAudio ? 'Enviando...' : 'Enviar áudio'}
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            {isUploadingAudio ? 'Enviando...' : 'Carregar áudio'}
                           </button>
                           {entry.audio ? (
                             <button
@@ -865,8 +824,9 @@ export default function AvatarVideoClient({
               Nenhum vídeo gerado até agora.
             </div>
           ) : (
-            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-              {history.map((item) => (
+            <>
+              <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                {paginatedHistory.map((item) => (
                 <div
                   key={item.id}
                   className="flex h-full flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition hover:shadow-md"
@@ -923,35 +883,17 @@ export default function AvatarVideoClient({
                         </p>
                       ) : null}
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-1">
-                        <svg className="h-3 w-3" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M5 3a2 2 0 00-2 2v3h2V5h3V3H5zm11 0v2h3v3h2V5a2 2 0 00-2-2h-3zM3 14v3a2 2 0 002 2h3v-2H5v-3H3zm16 0v3h-3v2h3a2 2 0 002-2v-3h-2z" />
-                        </svg>
-                        {item.creditosUtilizados ?? 0} créditos
-                      </span>
-                    </div>
-                    <div className="mt-auto flex items-center gap-3">
-                      {item.localVideoPath ? (
+                    <div className="mt-auto flex items-center justify-center">
+                      {item.remoteVideoUrl || item.localVideoPath ? (
                         <a
-                          href={item.localVideoPath}
+                          href={item.remoteVideoUrl || item.localVideoPath || ''}
                           download
-                          className="inline-flex flex-1 items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-gray-300 hover:text-gray-900"
+                          className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-emerald-500 to-green-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:shadow-lg"
                         >
                           <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M12 4v12m0 0l-3-3m3 3l3-3" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                           </svg>
-                          Baixar
-                        </a>
-                      ) : null}
-                      {item.remoteVideoUrl ? (
-                        <a
-                          href={item.remoteVideoUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center justify-center gap-2 rounded-full bg-gray-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-gray-700"
-                        >
-                          Assistir online
+                          Baixar vídeo
                         </a>
                       ) : null}
                     </div>
@@ -959,6 +901,48 @@ export default function AvatarVideoClient({
                 </div>
               ))}
             </div>
+
+            {totalPages > 1 ? (
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 transition hover:border-emerald-200 hover:text-emerald-600 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                  <button
+                    key={page}
+                    type="button"
+                    onClick={() => setCurrentPage(page)}
+                    className={`inline-flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold transition ${
+                      currentPage === page
+                        ? 'bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-md'
+                        : 'border border-gray-200 bg-white text-gray-700 hover:border-emerald-200 hover:text-emerald-600'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 transition hover:border-emerald-200 hover:text-emerald-600 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
+            ) : null}
+          </>
           )}
         </section>
       </div>
