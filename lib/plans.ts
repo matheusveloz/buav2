@@ -69,8 +69,6 @@ export const PLAN_CONFIGS: Record<PlanId, PlanConfig> = {
       'Clonar voz ilimitado',
       'Acesso a avatares padrões',
     ],
-    badges: ['Mais vendido'],
-    highlight: true,
   },
   premium: {
     id: 'premium',
@@ -96,7 +94,7 @@ export const PLAN_CONFIGS: Record<PlanId, PlanConfig> = {
       'Clonar voz ilimitado',
       'Acesso a avatares padrões',
     ],
-    badges: ['Popular entre equipes'],
+    badges: ['Mais Popular'],
     highlight: true,
   },
   unlimited: {

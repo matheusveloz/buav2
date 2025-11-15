@@ -162,6 +162,132 @@ export default function UpgradeClient({ initialProfile, userEmail }: UpgradeClie
             />
           ))}
         </div>
+
+        {/* Tabela de Comparação de Planos */}
+        <div className="mt-16">
+          <h2 className="text-3xl font-bold text-gray-900 text-center mb-8">
+            Comparação de Planos
+          </h2>
+          
+          <div className="overflow-x-auto rounded-2xl border-2 border-gray-200 shadow-xl bg-white">
+            <table className="w-full">
+              <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
+                <tr>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 sticky left-0 bg-gray-50">
+                    Recursos
+                  </th>
+                  {orderedPlans.map((plan) => (
+                    <th key={plan.id} className="px-6 py-4 text-center text-sm font-semibold text-gray-900">
+                      {plan.name}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {/* Créditos */}
+                <tr className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4 text-sm font-medium text-gray-900 sticky left-0 bg-white">
+                    Créditos iniciais
+                  </td>
+                  {orderedPlans.map((plan) => {
+                    const bonus = getBonusCredits(plan);
+                    return (
+                      <td key={plan.id} className="px-6 py-4 text-center text-sm text-gray-700 font-semibold">
+                        {(plan.includedCredits + bonus).toLocaleString('pt-BR')}
+                      </td>
+                    );
+                  })}
+                </tr>
+
+                {/* Bônus */}
+                <tr className="bg-gray-50 hover:bg-gray-100 transition-colors">
+                  <td className="px-6 py-4 text-sm font-medium text-gray-900 sticky left-0 bg-gray-50">
+                    Bônus
+                  </td>
+                  {orderedPlans.map((plan) => (
+                    <td key={plan.id} className="px-6 py-4 text-center text-sm text-gray-600">
+                      {plan.bonusPercentage > 0 ? `+${plan.bonusPercentage * 100}%` : '—'}
+                    </td>
+                  ))}
+                </tr>
+
+                {/* Duração de vídeo */}
+                <tr className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4 text-sm font-medium text-gray-900 sticky left-0 bg-white">
+                    Duração máxima de vídeo
+                  </td>
+                  {orderedPlans.map((plan) => (
+                    <td key={plan.id} className="px-6 py-4 text-center text-sm text-gray-700">
+                      {plan.videoLimitMinutes < 1 
+                        ? `${Math.round(plan.videoLimitMinutes * 60)} segundos`
+                        : `${plan.videoLimitMinutes} minuto${plan.videoLimitMinutes > 1 ? 's' : ''}`
+                      }
+                    </td>
+                  ))}
+                </tr>
+
+                {/* Uploads de avatares */}
+                <tr className="bg-gray-50 hover:bg-gray-100 transition-colors">
+                  <td className="px-6 py-4 text-sm font-medium text-gray-900 sticky left-0 bg-gray-50">
+                    Uploads de avatares
+                  </td>
+                  {orderedPlans.map((plan) => (
+                    <td key={plan.id} className="px-6 py-4 text-center text-sm text-gray-700">
+                      {plan.avatarUploadsLimit === null ? 'Ilimitado' : `Máximo ${plan.avatarUploadsLimit}`}
+                    </td>
+                  ))}
+                </tr>
+
+                {/* Processamentos simultâneos */}
+                <tr className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4 text-sm font-medium text-gray-900 sticky left-0 bg-white">
+                    Processamentos simultâneos
+                  </td>
+                  {orderedPlans.map((plan) => (
+                    <td key={plan.id} className="px-6 py-4 text-center text-sm text-gray-700 font-semibold">
+                      {plan.concurrentProcesses}
+                    </td>
+                  ))}
+                </tr>
+
+                {/* Processamento prioritário */}
+                <tr className="bg-gray-50 hover:bg-gray-100 transition-colors">
+                  <td className="px-6 py-4 text-sm font-medium text-gray-900 sticky left-0 bg-gray-50">
+                    Processamento prioritário
+                  </td>
+                  {orderedPlans.map((plan) => (
+                    <td key={plan.id} className="px-6 py-4 text-center">
+                      {plan.priorityProcessing ? (
+                        <svg className="w-5 h-5 text-emerald-500 mx-auto" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                      ) : (
+                        <svg className="w-5 h-5 text-gray-300 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+
+                {/* Recarga extra */}
+                <tr className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4 text-sm font-medium text-gray-900 sticky left-0 bg-white">
+                    Recarga extra por crédito
+                  </td>
+                  {orderedPlans.map((plan) => (
+                    <td key={plan.id} className="px-6 py-4 text-center text-sm text-gray-700">
+                      {plan.extraCreditPrice > 0 
+                        ? formatCurrencyBRL(plan.extraCreditPrice)
+                        : '—'
+                      }
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </section>
     </AuthenticatedShell>
   );
