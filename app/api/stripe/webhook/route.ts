@@ -53,10 +53,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Metadata incompleto' }, { status: 400 });
       }
 
-      // IMPORTANTE: SOMAR créditos, não substituir
+      console.log('🔍 ANTES DE BUSCAR USUÁRIO:', { userEmail, plan, totalCredits });
+
+      // Buscar créditos atuais do usuário
       const { data: currentUser, error: fetchError } = await supabaseAdmin
         .from('emails')
-        .select('creditos, creditos_extras')
+        .select('creditos, creditos_extras, plano')
         .eq('email', userEmail)
         .single();
 
@@ -65,14 +67,34 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });
       }
 
-      // SOMAR créditos aos existentes (não substituir!)
-      const newCredits = (currentUser.creditos || 0) + parseInt(totalCredits);
+      const creditosAntes = currentUser.creditos || 0;
+      const planoAntes = currentUser.plano;
 
+      console.log('📊 CRÉDITOS ANTES:', {
+        userEmail,
+        planoAntes,
+        creditosAntes,
+        creditos_extras: currentUser.creditos_extras,
+        totalAntes: creditosAntes + (currentUser.creditos_extras || 0),
+      });
+
+      // 🚨 IMPORTANTE: SOMAR créditos aos existentes (NÃO SUBSTITUIR!)
+      const creditsToAdd = parseInt(totalCredits);
+      const newCredits = creditosAntes + creditsToAdd;
+
+      console.log('➕ CALCULANDO SOMA:', {
+        creditosAntes,
+        '+': creditsToAdd,
+        '=': newCredits,
+        formula: `${creditosAntes} + ${creditsToAdd} = ${newCredits}`,
+      });
+
+      // Atualizar banco com créditos SOMADOS
       const { error: updateError } = await supabaseAdmin
         .from('emails')
         .update({
           plano: plan,
-          creditos: newCredits,
+          creditos: newCredits, // SOMA, não substitui!
         })
         .eq('email', userEmail);
 
@@ -80,6 +102,23 @@ export async function POST(request: NextRequest) {
         console.error('❌ Erro ao atualizar usuário:', updateError);
         return NextResponse.json({ error: 'Erro ao atualizar usuário' }, { status: 500 });
       }
+
+      console.log('✅ BANCO ATUALIZADO! Verificando...');
+
+      // Verificar se realmente atualizou
+      const { data: verificacao } = await supabaseAdmin
+        .from('emails')
+        .select('creditos, plano')
+        .eq('email', userEmail)
+        .single();
+
+      console.log('🔎 VERIFICAÇÃO FINAL:', {
+        userEmail,
+        planoNovo: verificacao?.plano,
+        creditosDepois: verificacao?.creditos,
+        esperado: newCredits,
+        somouCorreto: verificacao?.creditos === newCredits ? '✅ SIM' : '❌ NÃO',
+      });
 
       // Registrar/atualizar assinatura
       await supabaseAdmin
@@ -101,17 +140,20 @@ export async function POST(request: NextRequest) {
         user_email: userEmail,
         type: 'upgrade',
         plan: plan,
-        credits_added: parseInt(totalCredits),
+        credits_added: creditsToAdd,
         amount: session.amount_total ? session.amount_total / 100 : 0,
         stripe_session_id: session.id,
         status: 'completed',
       });
 
-      console.log('✅ Assinatura criada. Créditos SOMADOS:', {
+      console.log('🎉 UPGRADE COMPLETO:', {
         userEmail,
-        plan,
-        creditsAdded: totalCredits,
-        newTotal: newCredits,
+        planoAnterior: planoAntes,
+        planoNovo: plan,
+        creditosAntes: creditosAntes,
+        creditosAdicionados: creditsToAdd,
+        creditosDepois: newCredits,
+        diferenca: `+${creditsToAdd} créditos`,
       });
 
       break;
