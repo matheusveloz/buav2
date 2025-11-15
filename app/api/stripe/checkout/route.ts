@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const plan = body.plan || body.planId; // Aceita ambos
+    const plan = body.plan || body.planId;
 
     if (!plan || !PLAN_CONFIGS[plan as keyof typeof PLAN_CONFIGS]) {
       return NextResponse.json({ error: 'Plano inválido' }, { status: 400 });
@@ -96,18 +96,19 @@ export async function POST(request: NextRequest) {
             },
             unit_amount: planConfig.priceMonthly,
             recurring: {
-              interval: 'month', // Cobrança mensal
+              interval: 'month',
             },
           },
           quantity: 1,
         },
       ],
-      mode: 'subscription', // MODO ASSINATURA
-      success_url: `${origin}/upgrade?success=true&session_id={CHECKOUT_SESSION_ID}`,
+      mode: 'subscription',
+      success_url: `${origin}/upgrade?success=true`,
       cancel_url: `${origin}/upgrade?canceled=true`,
       subscription_data: {
         metadata: {
           plan: plan,
+          userEmail: user.email,
           credits: planConfig.credits,
           bonusCredits: planConfig.bonusCredits,
           totalCredits: planConfig.credits + planConfig.bonusCredits,

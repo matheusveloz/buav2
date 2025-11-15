@@ -36,10 +36,8 @@ export async function POST(request: NextRequest) {
 
   const supabaseAdmin = getSupabaseAdmin();
 
-  // Handle diferentes eventos de assinatura
   switch (event.type) {
     case 'checkout.session.completed': {
-      // Quando a primeira assinatura é criada
       const session = event.data.object as Stripe.Checkout.Session;
 
       console.log('💰 Checkout de assinatura concluído:', {
@@ -55,10 +53,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Metadata incompleto' }, { status: 400 });
       }
 
-      // Buscar usuário atual
+      // IMPORTANTE: SOMAR créditos, não substituir
       const { data: currentUser, error: fetchError } = await supabaseAdmin
         .from('emails')
-        .select('creditos, creditos_extras, plano')
+        .select('creditos, creditos_extras')
         .eq('email', userEmail)
         .single();
 
@@ -67,10 +65,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });
       }
 
-      // Adicionar créditos da primeira cobrança
+      // SOMAR créditos aos existentes (não substituir!)
       const newCredits = (currentUser.creditos || 0) + parseInt(totalCredits);
 
-      // Atualizar plano e adicionar subscription_id
       const { error: updateError } = await supabaseAdmin
         .from('emails')
         .update({
@@ -84,8 +81,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Erro ao atualizar usuário' }, { status: 500 });
       }
 
-      // Criar/atualizar registro de assinatura
-      const { error: subError } = await supabaseAdmin
+      // Registrar/atualizar assinatura
+      await supabaseAdmin
         .from('subscriptions')
         .upsert({
           user_email: userEmail,
@@ -95,14 +92,9 @@ export async function POST(request: NextRequest) {
           status: 'ativa',
           preco_mensal: session.amount_total ? session.amount_total / 100 : 0,
           data_inicio: new Date().toISOString(),
-          proxima_cobranca: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // +30 dias
         }, {
-          onConflict: 'stripe_subscription_id',
+          onConflict: 'user_email',
         });
-
-      if (subError) {
-        console.error('⚠️ Erro ao registrar assinatura:', subError);
-      }
 
       // Registrar transação
       await supabaseAdmin.from('transactions').insert({
@@ -115,57 +107,50 @@ export async function POST(request: NextRequest) {
         status: 'completed',
       });
 
-      console.log('✅ Assinatura criada com sucesso:', { userEmail, plan, creditsAdded: totalCredits });
+      console.log('✅ Assinatura criada. Créditos SOMADOS:', {
+        userEmail,
+        plan,
+        creditsAdded: totalCredits,
+        newTotal: newCredits,
+      });
+
       break;
     }
 
     case 'invoice.payment_succeeded': {
-      // Renovação mensal - adicionar créditos
       const invoice = event.data.object as Stripe.Invoice;
       const subscriptionId = invoice.subscription as string;
 
-      console.log('🔄 Renovação de assinatura paga:', {
-        invoiceId: invoice.id,
-        subscriptionId,
-      });
+      console.log('🔄 Renovação mensal paga:', { invoiceId: invoice.id, subscriptionId });
 
-      // Buscar assinatura
       const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-      const metadata = subscription.metadata;
-      const { plan, totalCredits } = metadata;
+      const { plan, totalCredits, userEmail } = subscription.metadata;
 
-      if (!plan || !totalCredits) {
+      if (!plan || !totalCredits || !userEmail) {
         console.error('❌ Metadata incompleto na assinatura');
         break;
       }
 
-      const customerEmail = invoice.customer_email;
-      if (!customerEmail) {
-        console.error('❌ Email do cliente não encontrado');
-        break;
-      }
-
-      // Buscar usuário
+      // SOMAR créditos mensais (renovação)
       const { data: currentUser } = await supabaseAdmin
         .from('emails')
         .select('creditos')
-        .eq('email', customerEmail)
+        .eq('email', userEmail)
         .single();
 
       if (!currentUser) {
-        console.error('❌ Usuário não encontrado:', customerEmail);
+        console.error('❌ Usuário não encontrado:', userEmail);
         break;
       }
 
-      // Adicionar créditos da renovação
       const newCredits = (currentUser.creditos || 0) + parseInt(totalCredits);
 
       await supabaseAdmin
         .from('emails')
         .update({ creditos: newCredits })
-        .eq('email', customerEmail);
+        .eq('email', userEmail);
 
-      // Atualizar status da assinatura
+      // Atualizar próxima cobrança
       await supabaseAdmin
         .from('subscriptions')
         .update({
@@ -175,9 +160,9 @@ export async function POST(request: NextRequest) {
         })
         .eq('stripe_subscription_id', subscriptionId);
 
-      // Registrar transação de renovação
+      // Registrar renovação
       await supabaseAdmin.from('transactions').insert({
-        user_email: customerEmail,
+        user_email: userEmail,
         type: 'upgrade',
         plan: plan,
         credits_added: parseInt(totalCredits),
@@ -186,21 +171,21 @@ export async function POST(request: NextRequest) {
         status: 'completed',
       });
 
-      console.log('✅ Créditos renovados:', { customerEmail, creditsAdded: totalCredits, newTotal: newCredits });
+      console.log('✅ Renovação: créditos SOMADOS:', {
+        userEmail,
+        creditsAdded: totalCredits,
+        newTotal: newCredits,
+      });
+
       break;
     }
 
     case 'invoice.payment_failed': {
-      // Falha no pagamento
       const invoice = event.data.object as Stripe.Invoice;
       const subscriptionId = invoice.subscription as string;
 
-      console.log('❌ Falha no pagamento da assinatura:', {
-        invoiceId: invoice.id,
-        subscriptionId,
-      });
+      console.log('❌ Falha no pagamento:', { invoiceId: invoice.id });
 
-      // Atualizar status da assinatura
       await supabaseAdmin
         .from('subscriptions')
         .update({
@@ -213,20 +198,16 @@ export async function POST(request: NextRequest) {
     }
 
     case 'customer.subscription.deleted': {
-      // Assinatura cancelada
       const subscription = event.data.object as Stripe.Subscription;
+      const userEmail = subscription.metadata?.userEmail;
 
-      console.log('🚫 Assinatura cancelada:', {
-        subscriptionId: subscription.id,
-      });
+      console.log('🚫 Assinatura cancelada:', { subscriptionId: subscription.id });
 
-      const customerEmail = subscription.metadata?.userEmail;
-      if (!customerEmail) {
-        console.error('❌ Email não encontrado no metadata da assinatura');
+      if (!userEmail) {
+        console.error('❌ Email não encontrado no metadata');
         break;
       }
 
-      // Atualizar status da assinatura
       await supabaseAdmin
         .from('subscriptions')
         .update({
@@ -235,13 +216,13 @@ export async function POST(request: NextRequest) {
         })
         .eq('stripe_subscription_id', subscription.id);
 
-      // Voltar usuário para plano free
+      // Voltar para plano free
       await supabaseAdmin
         .from('emails')
         .update({ plano: 'free' })
-        .eq('email', customerEmail);
+        .eq('email', userEmail);
 
-      console.log('✅ Usuário voltou para plano free:', customerEmail);
+      console.log('✅ Usuário voltou para plano free:', userEmail);
       break;
     }
 

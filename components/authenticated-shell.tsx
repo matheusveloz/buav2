@@ -474,7 +474,10 @@ export function AuthenticatedShell({ initialProfile, userEmail, children }: Auth
                   </div>
 
                   <div className="py-2">
-                    <button className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50">
+                    <Link
+                      href="/configuracoes"
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50"
+                    >
                       <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path
                           strokeLinecap="round"
@@ -490,7 +493,7 @@ export function AuthenticatedShell({ initialProfile, userEmail, children }: Auth
                         />
                       </svg>
                       Configurações
-                    </button>
+                    </Link>
 
                     <Link
                       href="/upgrade"
@@ -581,7 +584,10 @@ export function AuthenticatedShell({ initialProfile, userEmail, children }: Auth
               </div>
 
               <div className="mt-3 space-y-1">
-                <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                <Link
+                  href="/configuracoes"
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                >
                   <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path
                       strokeLinecap="round"
@@ -597,7 +603,7 @@ export function AuthenticatedShell({ initialProfile, userEmail, children }: Auth
                     />
                   </svg>
                   Configurações
-                </button>
+                </Link>
 
                 <Link
                   href="/upgrade"
