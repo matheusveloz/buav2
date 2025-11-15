@@ -82,13 +82,6 @@ export default function UpgradeClient({ initialProfile, userEmail }: UpgradeClie
       };
     }
 
-    if (searchParams.get('canceled')) {
-      return {
-        type: 'error',
-        message: 'Checkout cancelado. Você pode tentar novamente quando quiser.',
-      };
-    }
-
     return null;
   }, [searchParams]);
 
