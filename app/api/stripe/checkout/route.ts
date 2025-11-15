@@ -3,16 +3,16 @@ import Stripe from 'stripe';
 import { createSupabaseServerClient } from '@/lib/supabase-server';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-02-24.acacia',
+  apiVersion: '2024-11-20.acacia',
 });
 
 const PLAN_CONFIGS = {
   pro: {
     name: 'Plano Pro',
-    price: 4990, // R$ 49,90 em centavos
+    priceMonthly: 4990, // R$ 49,90/mês
     credits: 500,
     bonusCredits: 50, // 10% bônus
-    description: '500 créditos + 10% bônus',
+    description: '500 créditos + 10% bônus todo mês',
     features: [
       'Recarga extra R$0,30 por crédito',
       'Vídeos de até 3 minutos',
@@ -25,10 +25,10 @@ const PLAN_CONFIGS = {
   },
   premium: {
     name: 'Plano Premium',
-    price: 24990, // R$ 249,90 em centavos
+    priceMonthly: 24990, // R$ 249,90/mês
     credits: 1500,
     bonusCredits: 150, // 10% bônus
-    description: '1500 créditos + 10% bônus',
+    description: '1500 créditos + 10% bônus todo mês',
     features: [
       'Recarga extra R$0,25 por crédito',
       'Vídeos de até 10 minutos',
@@ -42,10 +42,10 @@ const PLAN_CONFIGS = {
   },
   unlimited: {
     name: 'Plano Unlimited',
-    price: 44990, // R$ 449,90 em centavos
+    priceMonthly: 44990, // R$ 449,90/mês
     credits: 4000,
     bonusCredits: 400, // 10% bônus
-    description: '4000 créditos + 10% bônus',
+    description: '4000 créditos + 10% bônus todo mês',
     features: [
       'Recarga extra R$0,10 por crédito',
       'Vídeos de até 10 minutos',
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const plan = body.plan || body.planId; // Aceita ambos: plan e planId
+    const plan = body.plan || body.planId; // Aceita ambos
 
     if (!plan || !PLAN_CONFIGS[plan as keyof typeof PLAN_CONFIGS]) {
       return NextResponse.json({ error: 'Plano inválido' }, { status: 400 });
@@ -79,11 +79,12 @@ export async function POST(request: NextRequest) {
 
     const planConfig = PLAN_CONFIGS[plan as keyof typeof PLAN_CONFIGS];
 
-    // Obter URL base do request ou variável de ambiente
+    // Obter URL base do request
     const origin = request.headers.get('origin') || request.headers.get('referer')?.split('/upgrade')[0] || process.env.NEXT_PUBLIC_SITE_URL || 'https://buav2.vercel.app';
 
-    // Criar sessão de checkout da Stripe
+    // Criar sessão de checkout da Stripe no MODO ASSINATURA
     const session = await stripe.checkout.sessions.create({
+      customer_email: user.email,
       payment_method_types: ['card'],
       line_items: [
         {
@@ -93,14 +94,25 @@ export async function POST(request: NextRequest) {
               name: planConfig.name,
               description: planConfig.description,
             },
-            unit_amount: planConfig.price,
+            unit_amount: planConfig.priceMonthly,
+            recurring: {
+              interval: 'month', // Cobrança mensal
+            },
           },
           quantity: 1,
         },
       ],
-      mode: 'payment',
-      success_url: `${origin}/upgrade?success=true`,
+      mode: 'subscription', // MODO ASSINATURA
+      success_url: `${origin}/upgrade?success=true&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/upgrade?canceled=true`,
+      subscription_data: {
+        metadata: {
+          plan: plan,
+          credits: planConfig.credits,
+          bonusCredits: planConfig.bonusCredits,
+          totalCredits: planConfig.credits + planConfig.bonusCredits,
+        },
+      },
       metadata: {
         userId: user.id,
         userEmail: user.email,
