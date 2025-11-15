@@ -133,25 +133,15 @@ export default function UpgradeClient({ initialProfile, userEmail }: UpgradeClie
 
   return (
     <AuthenticatedShell initialProfile={initialProfile} userEmail={userEmail}>
-      <section className="space-y-8 px-4 sm:px-6 lg:px-8">
-        <div className="rounded-3xl border border-white/60 bg-white/70 p-6 shadow-xl backdrop-blur-xl sm:p-10">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-sm uppercase tracking-wide text-gray-500">Assinaturas BUUA</p>
-              <h1 className="mt-2 text-3xl font-bold text-gray-900 sm:text-4xl">Faça upgrade para desbloquear tudo</h1>
-              <p className="mt-3 max-w-2xl text-base text-gray-600">
-                Checkout dinâmico via Stripe (modo teste). Os planos pagos liberam créditos automaticamente e ajustam
-                seus limites de minutos, uploads e prioridade de processamento.
-              </p>
-            </div>
-            <div className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-5 shadow-inner">
-              <p className="text-sm text-emerald-600">Plano atual</p>
-              <p className="text-2xl font-semibold text-emerald-800 capitalize">{currentPlanSlug}</p>
-              <p className="text-sm text-emerald-700">
-                Créditos disponíveis: {initialProfile.credits + initialProfile.extraCredits}
-              </p>
-            </div>
-          </div>
+      <section className="space-y-10 px-4 sm:px-6 lg:px-8">
+        {/* Header Minimalista */}
+        <div className="text-center">
+          <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">
+            Seu plano atual: <span className="text-gray-900 capitalize font-semibold">{currentPlanSlug}</span>
+          </p>
+          <h1 className="mt-3 text-4xl font-bold text-gray-900 sm:text-5xl">
+            Faça upgrade para desbloquear mais recursos!
+          </h1>
         </div>
 
         {alertFromQuery && (
@@ -160,6 +150,7 @@ export default function UpgradeClient({ initialProfile, userEmail }: UpgradeClie
 
         {feedback && !alertFromQuery && <AlertBanner state={feedback.type} message={feedback.message} />}
 
+        {/* Cards de Planos */}
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
           {orderedPlans.map((plan) => (
             <PlanCard
@@ -170,24 +161,6 @@ export default function UpgradeClient({ initialProfile, userEmail }: UpgradeClie
               onCheckout={handleCheckout}
             />
           ))}
-        </div>
-
-        <div className="rounded-3xl border border-gray-200/80 bg-white/80 p-6 shadow-xl backdrop-blur-md sm:p-10">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-wide text-gray-500">Checkout dinâmico</p>
-              <h2 className="text-2xl font-bold text-gray-900">Como funciona</h2>
-              <p className="mt-2 text-sm text-gray-600">
-                Toda compra cria uma sessão instantânea no modo teste da Stripe. Após o pagamento, o webhook confirma o
-                evento e credita seu saldo automaticamente.
-              </p>
-            </div>
-            <div className="space-y-2 text-sm text-gray-600">
-              <p>1. Escolha o plano desejado e clique em “Fazer upgrade”.</p>
-              <p>2. Finalize o checkout seguro da Stripe.</p>
-              <p>3. Aguarde o processamento do webhook (alguns segundos).</p>
-            </div>
-          </div>
         </div>
       </section>
     </AuthenticatedShell>
@@ -212,81 +185,76 @@ function PlanCard({
 
   return (
     <div
-      className={`flex flex-col rounded-3xl border ${theme.border} ${theme.background} p-6 shadow-lg transition hover:-translate-y-1 hover:shadow-2xl`}
+      className={`relative flex flex-col rounded-2xl border-2 ${
+        isCurrent ? 'border-emerald-500 shadow-lg shadow-emerald-100' : theme.border
+      } bg-white p-6 transition hover:shadow-xl`}
     >
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-xs uppercase tracking-widest text-gray-500">Plano</p>
-          <h3 className="text-2xl font-semibold text-gray-900">{plan.name}</h3>
-        </div>
-        <div className="text-right">
-          <p className="text-3xl font-bold text-gray-900">{priceLabel}</p>
-          {plan.priceCents > 0 ? (
-            <p className="text-xs text-gray-500">Pagamento único</p>
-          ) : (
-            <p className="text-xs text-gray-500">Já incluído</p>
-          )}
-        </div>
-      </div>
-
-      {plan.badges && (
-        <div className="mt-4 flex flex-wrap gap-2">
-          {plan.badges.map((badge) => (
-            <span key={badge} className={`rounded-full px-3 py-1 text-xs font-medium ${theme.badge}`}>
-              {badge}
-            </span>
-          ))}
+      {/* Badge de Plano Ativo */}
+      {isCurrent && (
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500 px-3 py-1 text-xs font-semibold text-white">
+            <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            Plano Ativo
+          </span>
         </div>
       )}
 
-      <div className="mt-6 rounded-2xl border border-white/50 bg-white/70 p-4 text-sm text-gray-700 shadow-inner">
-        <p className="font-semibold text-gray-900">{plan.includedCredits} créditos</p>
-        <p className="text-gray-600">Bônus de {bonus} créditos ({plan.bonusPercentage * 100}%)</p>
-        <p className="mt-1 text-gray-500">Total liberado: {totalCredits} créditos</p>
+      {/* Cabeçalho do Card */}
+      <div className="text-center">
+        <h3 className="text-xl font-bold text-gray-900">{plan.name}</h3>
+        <div className="mt-3">
+          <span className="text-4xl font-bold text-gray-900">{priceLabel}</span>
+          {plan.priceCents > 0 && <span className="text-sm text-gray-500 ml-1">/mês</span>}
+        </div>
+        <p className="mt-2 text-sm font-medium text-gray-600">
+          {totalCredits.toLocaleString('pt-BR')} créditos
+        </p>
       </div>
 
-      <p className="mt-6 text-sm text-gray-600">{plan.description}</p>
+      {/* Divisor */}
+      <div className="my-6 border-t border-gray-200"></div>
 
-      <ul className="mt-6 space-y-3 text-sm text-gray-700">
+      {/* Lista de Recursos */}
+      <ul className="flex-1 space-y-3 text-sm text-gray-700">
         {plan.perks.map((perk) => (
-          <li key={perk} className="flex items-start gap-2">
+          <li key={perk} className="flex items-start gap-2.5">
             <CheckIcon />
-            <span>{perk}</span>
+            <span className="leading-relaxed">{perk}</span>
           </li>
         ))}
       </ul>
 
+      {/* Botão de Ação */}
       <div className="mt-8">
         <button
           type="button"
           onClick={() => onCheckout(plan.id)}
           disabled={plan.priceCents === 0 || isCurrent || isLoading}
-          className={`flex w-full items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold transition ${
+          className={`w-full rounded-lg px-5 py-3 text-sm font-semibold transition ${
             plan.priceCents === 0 || isCurrent
-              ? 'cursor-not-allowed bg-gray-200/80 text-gray-500'
-              : `${theme.button} ${theme.buttonHover}`
-          } ${isLoading ? 'opacity-80' : ''}`}
+              ? 'cursor-not-allowed bg-gray-100 text-gray-400'
+              : `${theme.button} ${theme.buttonHover} shadow-sm`
+          } ${isLoading ? 'opacity-70' : ''}`}
         >
-          {isCurrent ? 'Plano ativo' : plan.priceCents === 0 ? 'Incluído' : isLoading ? 'Abrindo checkout...' : 'Fazer upgrade'}
-          {!isCurrent && plan.priceCents > 0 && !isLoading && (
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
-            </svg>
-          )}
+          {isCurrent 
+            ? '✓ Plano Atual' 
+            : plan.priceCents === 0 
+            ? 'Gratuito' 
+            : isLoading 
+            ? 'Carregando...' 
+            : 'Selecionar Plano'}
         </button>
       </div>
-
-      {isCurrent && (
-        <p className="mt-3 text-center text-xs text-emerald-600">Você já está neste plano.</p>
-      )}
     </div>
   );
 }
 
 function CheckIcon() {
   return (
-    <svg className="mt-0.5 h-4 w-4 text-emerald-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+    <svg className="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
+      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
     </svg>
   );
 }
@@ -295,13 +263,24 @@ function AlertBanner({ state, message }: { state: 'success' | 'error'; message: 
   const isSuccess = state === 'success';
   return (
     <div
-      className={`rounded-2xl border p-4 text-sm ${
+      className={`rounded-xl border p-4 text-sm font-medium ${
         isSuccess
-          ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-          : 'border-amber-200 bg-amber-50 text-amber-800'
+          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+          : 'border-amber-200 bg-amber-50 text-amber-700'
       }`}
     >
-      {message}
+      <div className="flex items-center gap-3">
+        {isSuccess ? (
+          <svg className="h-5 w-5 text-emerald-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+          </svg>
+        ) : (
+          <svg className="h-5 w-5 text-amber-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+          </svg>
+        )}
+        <span>{message}</span>
+      </div>
     </div>
   );
 }
