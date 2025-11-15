@@ -77,8 +77,7 @@ export default function UpgradeClient({ initialProfile, userEmail }: UpgradeClie
     if (searchParams.get('success')) {
       return {
         type: 'success',
-        message:
-          'Pagamento recebido! Os créditos serão liberados assim que o webhook da Stripe terminar o processamento (modo teste).',
+        message: 'Pagamento concluído! Seu plano foi atualizado e os créditos já estão disponíveis.',
       };
     }
 
@@ -129,10 +128,10 @@ export default function UpgradeClient({ initialProfile, userEmail }: UpgradeClie
       <section className="space-y-10 px-4 sm:px-6 lg:px-8">
         {/* Header Minimalista */}
         <div className="text-center">
-          <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">
-            Seu plano atual: <span className="text-gray-900 capitalize font-semibold">{currentPlanSlug}</span>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            Seu plano atual: <span className="text-gray-900 capitalize">{currentPlanSlug}</span>
           </p>
-          <h1 className="mt-3 text-4xl font-bold text-gray-900 sm:text-5xl">
+          <h1 className="mt-2 text-3xl font-bold text-gray-900 sm:text-4xl">
             Faça upgrade para desbloquear mais recursos!
           </h1>
         </div>
