@@ -79,6 +79,9 @@ export async function POST(request: NextRequest) {
 
     const planConfig = PLAN_CONFIGS[plan as keyof typeof PLAN_CONFIGS];
 
+    // Obter URL base do request ou variável de ambiente
+    const origin = request.headers.get('origin') || request.headers.get('referer')?.split('/upgrade')[0] || process.env.NEXT_PUBLIC_SITE_URL || 'https://buav2.vercel.app';
+
     // Criar sessão de checkout da Stripe
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
@@ -96,8 +99,8 @@ export async function POST(request: NextRequest) {
         },
       ],
       mode: 'payment',
-      success_url: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/upgrade?success=true`,
-      cancel_url: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/upgrade?canceled=true`,
+      success_url: `${origin}/upgrade?success=true`,
+      cancel_url: `${origin}/upgrade?canceled=true`,
       metadata: {
         userId: user.id,
         userEmail: user.email,
