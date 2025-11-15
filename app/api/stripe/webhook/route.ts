@@ -78,23 +78,23 @@ export async function POST(request: NextRequest) {
         totalAntes: creditosAntes + (currentUser.creditos_extras || 0),
       });
 
-      // 🚨 IMPORTANTE: SOMAR créditos aos existentes (NÃO SUBSTITUIR!)
-      const creditsToAdd = parseInt(totalCredits);
-      const newCredits = creditosAntes + creditsToAdd;
+      // ⚠️ IMPORTANTE: SUBSTITUIR créditos do plano (não somar!)
+      // Quando muda de plano, recebe os créditos do NOVO plano apenas
+      const creditsToSet = parseInt(totalCredits);
 
-      console.log('➕ CALCULANDO SOMA:', {
+      console.log('🔄 SUBSTITUINDO CRÉDITOS:', {
         creditosAntes,
-        '+': creditsToAdd,
-        '=': newCredits,
-        formula: `${creditosAntes} + ${creditsToAdd} = ${newCredits}`,
+        '→': creditsToSet,
+        planoAnterior: planoAntes,
+        planoNovo: plan,
       });
 
-      // Atualizar banco com créditos SOMADOS
+      // Atualizar banco SUBSTITUINDO os créditos
       const { error: updateError } = await supabaseAdmin
         .from('emails')
         .update({
           plano: plan,
-          creditos: newCredits, // SOMA, não substitui!
+          creditos: creditsToSet, // Substitui pelos créditos do novo plano
         })
         .eq('email', userEmail);
 
@@ -116,8 +116,8 @@ export async function POST(request: NextRequest) {
         userEmail,
         planoNovo: verificacao?.plano,
         creditosDepois: verificacao?.creditos,
-        esperado: newCredits,
-        somouCorreto: verificacao?.creditos === newCredits ? '✅ SIM' : '❌ NÃO',
+        esperado: creditsToSet,
+        substituiuCorreto: verificacao?.creditos === creditsToSet ? '✅ SIM' : '❌ NÃO',
       });
 
       // Registrar/atualizar assinatura
@@ -140,7 +140,7 @@ export async function POST(request: NextRequest) {
         user_email: userEmail,
         type: 'upgrade',
         plan: plan,
-        credits_added: creditsToAdd,
+        credits_added: creditsToSet,
         amount: session.amount_total ? session.amount_total / 100 : 0,
         stripe_session_id: session.id,
         status: 'completed',
@@ -150,10 +150,9 @@ export async function POST(request: NextRequest) {
         userEmail,
         planoAnterior: planoAntes,
         planoNovo: plan,
-        creditosAntes: creditosAntes,
-        creditosAdicionados: creditsToAdd,
-        creditosDepois: newCredits,
-        diferenca: `+${creditsToAdd} créditos`,
+        creditosAntigos: creditosAntes,
+        creditosNovos: creditsToSet,
+        acao: 'SUBSTITUIU (não somou)',
       });
 
       break;
