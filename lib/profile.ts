@@ -25,3 +25,5 @@ export function buildInitialProfile(row: ProfileRow): Profile {
   };
 }
 
+// Alias para compatibilidade
+export const normalizeProfile = buildInitialProfile;

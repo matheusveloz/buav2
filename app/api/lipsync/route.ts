@@ -7,6 +7,7 @@ type LipsyncRequestBody = {
   srcVideoUrl?: string;
   audioUrl?: string;
   vocalAudioUrl?: string | null;
+  estimatedDuration?: number;
   videoParams?: Partial<{
     video_width: number;
     video_height: number;
@@ -39,6 +40,33 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
+    // Verificar créditos do usuário ANTES de processar
+    const { data: profile } = await supabase
+      .from('emails')
+      .select('creditos, creditos_extras')
+      .eq('email', user.email)
+      .single();
+
+    if (!profile) {
+      return NextResponse.json({ error: 'Perfil de usuário não encontrado' }, { status: 404 });
+    }
+
+    const totalCredits = (profile.creditos || 0) + (profile.creditos_extras || 0);
+    
+    // Verificação básica: pelo menos 1 crédito
+    if (totalCredits < 1) {
+      console.log('❌ Usuário sem créditos:', {
+        email: user.email,
+        creditos: profile.creditos,
+        creditos_extras: profile.creditos_extras,
+        total: totalCredits
+      });
+      return NextResponse.json({ 
+        error: 'Créditos insuficientes',
+        details: 'Você não possui créditos suficientes para gerar vídeos.'
+      }, { status: 403 });
+    }
+
     const apiKey = process.env.NEXT_PUBLIC_NEWPORT_API_KEY;
 
     if (!apiKey) {
@@ -47,13 +75,31 @@ export async function POST(request: Request) {
     }
 
     const body = (await request.json()) as LipsyncRequestBody;
-    const { srcVideoUrl, audioUrl, vocalAudioUrl, videoParams } = body;
+    const { srcVideoUrl, audioUrl, vocalAudioUrl, videoParams, estimatedDuration } = body;
 
     if (!srcVideoUrl || !audioUrl) {
       return NextResponse.json(
         { error: 'srcVideoUrl e audioUrl são obrigatórios' },
         { status: 400 }
       );
+    }
+
+    // Calcular créditos necessários baseado na duração estimada do áudio
+    const duration = estimatedDuration || 0;
+    const creditsNeeded = Math.max(1, duration + 1);
+
+    // Verificar se tem créditos suficientes para esta requisição específica
+    if (totalCredits < creditsNeeded) {
+      console.log('❌ Créditos insuficientes para este vídeo:', {
+        email: user.email,
+        creditosDisponiveis: totalCredits,
+        creditosNecessarios: creditsNeeded,
+        duracao: duration
+      });
+      return NextResponse.json({ 
+        error: 'Créditos insuficientes',
+        details: `Você precisa de ${creditsNeeded} créditos para este vídeo de ${duration}s, mas possui apenas ${totalCredits}.`
+      }, { status: 403 });
     }
 
     const payload = {
@@ -101,17 +147,71 @@ export async function POST(request: Request) {
 
     const taskId = data.data.taskId;
 
+    // DESCONTAR CRÉDITOS DE FORMA ATÔMICA (thread-safe)
+    // Isso previne race conditions quando múltiplos vídeos são processados simultaneamente
+    console.log('💰 Descontando créditos ANTES de processar o vídeo (ATÔMICO):', {
+      email: user.email,
+      creditos_atuais: profile.creditos,
+      creditos_extras_atuais: profile.creditos_extras,
+      total_atual: totalCredits,
+      creditos_a_descontar: creditsNeeded,
+    });
+
+    const { data: deductResult, error: deductError } = await supabase.rpc('deduct_credits_atomic', {
+      p_email: user.email,
+      p_credits_to_deduct: creditsNeeded,
+    });
+
+    if (deductError || !deductResult || deductResult.length === 0) {
+      console.error('❌ Erro ao descontar créditos (RPC):', deductError);
+      return NextResponse.json(
+        { error: 'Erro ao processar pagamento. Tente novamente.' },
+        { status: 500 }
+      );
+    }
+
+    const result = deductResult[0];
+
+    if (!result.success) {
+      console.error('❌ Falha ao descontar créditos:', result.error_message);
+      return NextResponse.json(
+        { error: result.error_message || 'Erro ao descontar créditos' },
+        { status: 403 }
+      );
+    }
+
+    const newRegular = result.new_creditos;
+    const newExtras = result.new_creditos_extras;
+
+    console.log('✅ Créditos descontados com sucesso (ATÔMICO):', {
+      creditos_novos: newRegular,
+      creditos_extras_novos: newExtras,
+      total_novo: result.total_remaining,
+      descontado: creditsNeeded,
+    });
+
     const insertResult = await supabase.from('videos').insert({
       user_email: user.email,
       task_id: taskId,
       status: 'pending',
       source_video_url: srcVideoUrl,
       audio_url: audioUrl,
-      creditos_utilizados: 0,
+      creditos_utilizados: creditsNeeded, // Registrar os créditos já cobrados
     });
 
     if (insertResult.error) {
       console.error('Erro ao registrar task: ', insertResult.error);
+      
+      // Se falhar ao registrar, DEVOLVER os créditos
+      console.log('⚠️ Devolvendo créditos por falha no registro...');
+      await supabase
+        .from('emails')
+        .update({
+          creditos: profile.creditos,
+          creditos_extras: profile.creditos_extras,
+        })
+        .eq('email', user.email);
+        
       return NextResponse.json(
         { error: 'Task criada, mas não foi possível registrar no banco.' },
         { status: 500 }
@@ -122,6 +222,12 @@ export async function POST(request: Request) {
       {
         taskId,
         message: 'Task criada e registrada com sucesso.',
+        creditsDeducted: creditsNeeded,
+        newBalance: {
+          creditos: newRegular,
+          creditos_extras: newExtras,
+          total: newRegular + newExtras,
+        },
       },
       { status: 201 }
     );

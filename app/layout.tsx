@@ -11,6 +11,11 @@ const poppins = Poppins({
 export const metadata: Metadata = {
   title: "BUUA - Plataforma de Gestão",
   description: "A nova versão da plataforma BUUA está chegando",
+  icons: {
+    icon: '/ico.png',
+    shortcut: '/ico.png',
+    apple: '/ico.png',
+  },
 };
 
 export default function RootLayout({

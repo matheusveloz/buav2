@@ -5,6 +5,7 @@ import { saveAudioFile, resolveFileExtension } from '@/lib/file-storage';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 300; // 5 minutos timeout (para áudios grandes)
 
 const DEFAULT_AUDIO_BUCKET = 'audio';
 
@@ -29,11 +30,115 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
+    // Verificar o Content-Type para determinar o tipo de upload
+    const contentType = request.headers.get('content-type') || '';
+    const isDirectUpload = contentType.includes('application/json');
+
+    console.log('[POST /api/audio/upload] Requisição recebida:', {
+      contentType,
+      isDirectUpload,
+      userEmail: user.email,
+    });
+
+    // UPLOAD DIRETO (já foi feito no cliente, só registrar no banco)
+    if (isDirectUpload) {
+      const body = await request.json();
+      const { strategy, fileId, storagePath, storageBucket, publicUrl, originalFilename, extension } = body;
+
+      if (strategy !== 'direct' || !fileId || !publicUrl) {
+        return NextResponse.json({ error: 'Dados inválidos para registro direto' }, { status: 400 });
+      }
+
+      console.log('📝 Registrando áudio de upload direto:', {
+        fileId,
+        storagePath,
+        publicUrl,
+        originalFilename,
+      });
+
+      const { data: inserted, error: insertError } = await supabase
+        .from('user_audios')
+        .insert({
+          id: fileId,
+          user_email: user.email,
+          audio_url: publicUrl,
+          storage_bucket: storageBucket ?? null,
+          storage_path: storagePath ?? null,
+          original_filename: originalFilename ?? null,
+          extension: extension ?? null,
+        })
+        .select('*')
+        .maybeSingle();
+
+      if (insertError || !inserted) {
+        console.error('Erro ao registrar áudio do usuário', insertError);
+        return NextResponse.json(
+          { error: 'Áudio salvo, mas falhou ao registrar no banco.' },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json(
+        {
+          audio: {
+            id: inserted.id,
+            url: inserted.audio_url,
+            name: inserted.original_filename ?? originalFilename,
+            extension: inserted.extension ?? extension,
+            type: 'upload' as const,
+            storageBucket: inserted.storage_bucket ?? storageBucket,
+            storagePath: inserted.storage_path ?? storagePath,
+          },
+        },
+        { status: 201 }
+      );
+    }
+
+    // UPLOAD TRADICIONAL VIA FORMDATA (para arquivos menores)
     const formData = await request.formData();
+    
+    console.log('[POST /api/audio/upload] FormData recebido. Chaves:', Array.from(formData.keys()));
+    
     const file = formData.get('file');
 
     if (!(file instanceof File)) {
-      return NextResponse.json({ error: 'Arquivo de áudio não enviado' }, { status: 400 });
+      const allEntries = Array.from(formData.entries()).map(([key, value]) => ({
+        key,
+        valueType: value instanceof File ? 'File' : typeof value,
+        fileName: value instanceof File ? value.name : undefined,
+      }));
+      
+      console.error('[POST /api/audio/upload] Arquivo não encontrado:', {
+        chavesRecebidas: Array.from(formData.keys()),
+        todasEntradas: allEntries,
+        valorDoCampoFile: file,
+      });
+      
+      return NextResponse.json({ 
+        error: 'Arquivo de áudio não enviado',
+        details: `Campo "file" não encontrado. Chaves recebidas: ${Array.from(formData.keys()).join(', ')}`
+      }, { status: 400 });
+    }
+
+    const fileSizeMB = file.size / (1024 * 1024);
+
+    console.log('[POST /api/audio/upload] Arquivo recebido:', {
+      nome: file.name,
+      tamanho: `${fileSizeMB.toFixed(2)}MB`,
+      tipo: file.type,
+      size: file.size,
+    });
+
+    // Validar tamanho do arquivo (máximo 50MB para upload tradicional)
+    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        {
+          error: 'Arquivo muito grande',
+          details: `O arquivo tem ${fileSizeMB.toFixed(2)}MB. Use arquivos menores ou o upload será feito diretamente.`,
+        },
+        { status: 413 }
+      );
     }
 
     const arrayBuffer = await file.arrayBuffer();

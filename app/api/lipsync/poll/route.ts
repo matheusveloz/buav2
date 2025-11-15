@@ -107,6 +107,39 @@ export async function POST(request: Request) {
     }
 
     if (taskStatus === 4) {
+      // DEVOLVER CRÉDITOS EM CASO DE ERRO
+      console.log('❌ Vídeo falhou, devolvendo créditos:', {
+        taskId,
+        creditos_a_devolver: existing.creditos_utilizados,
+        motivo: failureReason,
+      });
+
+      if (existing.creditos_utilizados > 0) {
+        const { data: currentProfile } = await supabase
+          .from('emails')
+          .select('creditos, creditos_extras')
+          .eq('email', user.email)
+          .maybeSingle();
+
+        if (currentProfile) {
+          // Devolver aos créditos regulares
+          const newCredits = (currentProfile.creditos || 0) + existing.creditos_utilizados;
+          
+          await supabase
+            .from('emails')
+            .update({
+              creditos: newCredits,
+            })
+            .eq('email', user.email);
+
+          console.log('💰 Créditos devolvidos:', {
+            creditos_anteriores: currentProfile.creditos,
+            creditos_devolvidos: existing.creditos_utilizados,
+            creditos_novos: newCredits,
+          });
+        }
+      }
+
       await supabase
         .from('videos')
         .update({
@@ -128,6 +161,7 @@ export async function POST(request: Request) {
         status: 'failed',
         reason: failureReason,
         record: failedRecord ?? null,
+        creditsRefunded: existing.creditos_utilizados,
       });
     }
 
@@ -147,9 +181,11 @@ export async function POST(request: Request) {
         ? data.data.task.executionTime
         : undefined;
 
-    const durationMs = sttTotalLengthMs ?? executionTimeMs ?? 0;
-    const durationSeconds = Math.max(0, Math.ceil(durationMs / 1000));
-    const creditsUsed = durationSeconds + 1;
+    console.log('📊 Dados brutos da API Newport:', {
+      sttTotalLengthMs,
+      executionTimeMs,
+      hasVideo: !!videoUrl,
+    });
 
     if (!videoUrl) {
       return NextResponse.json(
@@ -168,14 +204,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // Baixar o vídeo e salvar no Supabase Storage
+    // Baixar o vídeo
     const buffer = await videoResponse.arrayBuffer();
     const extension = videoType.replace(/^\./, '') || 'mp4';
     
     let ourVideoUrl: string | null = null;
     let localPath: string | null = null;
 
-    // Tentar salvar no Supabase Storage
+    // Upload direto para Supabase Storage
     const videoBucket = process.env.NEXT_PUBLIC_SUPABASE_VIDEO_BUCKET?.trim() || 'videos';
     const storagePath = `${user.id}/${taskId}.${extension}`;
     
@@ -189,23 +225,48 @@ export async function POST(request: Request) {
 
     if (uploadError) {
       console.warn('Não foi possível salvar vídeo no Supabase Storage, usando URL remota', uploadError);
-      // Se falhar no storage, usa a URL remota
       ourVideoUrl = videoUrl;
     } else {
-      // Sucesso: usar nossa URL do Supabase
       const { data: publicUrlResult } = supabase.storage.from(videoBucket).getPublicUrl(storagePath);
       ourVideoUrl = publicUrlResult.publicUrl;
-      
-      // Também tentar salvar localmente se não estiver no Vercel
-      if (!process.env.VERCEL) {
-        try {
-          const { publicPath } = await saveVideoBuffer(taskId, buffer, extension);
-          localPath = publicPath;
-        } catch (saveError) {
-          console.warn('Não foi possível salvar localmente', saveError);
-        }
+    }
+
+    // Salvar localmente apenas em desenvolvimento
+    if (!process.env.VERCEL) {
+      try {
+        const { publicPath } = await saveVideoBuffer(taskId, buffer, extension);
+        localPath = publicPath;
+      } catch (saveError) {
+        console.warn('Não foi possível salvar localmente', saveError);
       }
     }
+
+    // AGORA calcular duração e créditos DEPOIS de processar o vídeo
+    // Prioridade: usar duração do áudio retornado pela API
+    let durationSeconds = 0;
+    
+    if (sttTotalLengthMs !== undefined && sttTotalLengthMs > 0) {
+      durationSeconds = Math.floor(sttTotalLengthMs);
+      console.log('📊 Usando duração do áudio (sttResult.tl):', {
+        rawValue: sttTotalLengthMs,
+        durationSeconds,
+      });
+    } else if (executionTimeMs !== undefined && executionTimeMs > 0) {
+      // Último recurso: execution time (milissegundos)
+      durationSeconds = Math.floor(executionTimeMs / 1000);
+      console.log('⏱️ Fallback: usando execution time:', {
+        rawValue: executionTimeMs,
+        durationSeconds,
+      });
+    }
+
+    const creditsUsed = Math.max(1, durationSeconds + 1); // Mínimo 1 crédito
+
+    console.log('💰 Cálculo final de créditos:', {
+      durationSeconds,
+      creditsUsed,
+      formula: `${durationSeconds} segundos + 1 = ${creditsUsed} créditos`,
+    });
 
     const updateResult = await supabase
       .from('videos')
@@ -213,6 +274,7 @@ export async function POST(request: Request) {
         status: 'completed',
         remote_video_url: ourVideoUrl || videoUrl,
         local_video_path: localPath,
+        cloudinary_public_id: null,
         creditos_utilizados: creditsUsed,
         failure_reason: null,
         updated_at: new Date().toISOString(),
@@ -227,6 +289,13 @@ export async function POST(request: Request) {
         { status: 500 }
       );
     }
+
+    // CRÉDITOS JÁ FORAM DESCONTADOS NO INÍCIO - NÃO COBRAR NOVAMENTE
+    console.log('✅ Créditos já cobrados no início:', {
+      creditos_ja_cobrados: existing.creditos_utilizados,
+      duracao_real: durationSeconds,
+      creditos_que_seriam_cobrados: creditsUsed,
+    });
 
     const { data: updatedRecord } = await supabase
       .from('videos')

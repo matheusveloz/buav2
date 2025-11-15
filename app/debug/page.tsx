@@ -22,7 +22,11 @@ export default async function DebugPage() {
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? '✓ Configurado' : '✗ Ausente',
     NEXT_PUBLIC_SUPABASE_AUDIO_BUCKET: process.env.NEXT_PUBLIC_SUPABASE_AUDIO_BUCKET || 'audio (padrão)',
     NEXT_PUBLIC_SUPABASE_AVATAR_BUCKET: process.env.NEXT_PUBLIC_SUPABASE_AVATAR_BUCKET || 'avatars (padrão)',
+    NEXT_PUBLIC_SUPABASE_VIDEO_BUCKET: process.env.NEXT_PUBLIC_SUPABASE_VIDEO_BUCKET || 'videos (padrão)',
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || 'Não configurado',
+    CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME ? '✓ Configurado' : '✗ Ausente (Opcional)',
+    CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY ? '✓ Configurado' : '✗ Ausente (Opcional)',
+    CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET ? '✓ Configurado' : '✗ Ausente (Opcional)',
     VERCEL: process.env.VERCEL ? '✓ Rodando no Vercel' : '✗ Ambiente local',
     NODE_ENV: process.env.NODE_ENV || 'development',
   };
@@ -234,7 +238,7 @@ export default async function DebugPage() {
               <strong>NEXT_PUBLIC_NEWPORT_API_KEY ausente:</strong> Adicione a variável no Vercel (Settings → Environment Variables)
             </li>
             <li>
-              <strong>Bucket não encontrado:</strong> Crie os buckets 'audio' e 'avatars' no Supabase Storage
+              <strong>Bucket não encontrado:</strong> Crie os buckets 'audio', 'avatars' e 'videos' no Supabase Storage
             </li>
             <li>
               <strong>Erro nas tabelas:</strong> Execute as migrations SQL no Supabase e configure RLS policies
@@ -243,6 +247,33 @@ export default async function DebugPage() {
               <strong>Após fazer mudanças:</strong> Faça redeploy no Vercel para aplicar as configurações
             </li>
           </ul>
+        </div>
+
+        {/* Cloudinary Info */}
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-6">
+          <h3 className="mb-2 font-semibold text-blue-900">🎬 Cloudinary (Opcional - Otimização de vídeos)</h3>
+          <p className="mb-3 text-sm text-blue-800">
+            {process.env.CLOUDINARY_CLOUD_NAME ? (
+              <span className="text-green-700">✓ Configurado - Vídeos serão padronizados para 25 FPS</span>
+            ) : (
+              <span className="text-amber-700">✗ Não configurado - Vídeos serão salvos sem otimização</span>
+            )}
+          </p>
+          <div className="text-sm text-blue-800">
+            <p className="mb-2 font-medium">Para configurar:</p>
+            <ol className="ml-4 list-decimal space-y-1">
+              <li>Crie conta em <a href="https://cloudinary.com" target="_blank" rel="noopener noreferrer" className="underline">cloudinary.com</a></li>
+              <li>No Dashboard, copie: Cloud Name, API Key, API Secret</li>
+              <li>Adicione no Vercel as 3 variáveis:
+                <ul className="ml-4 mt-1 list-disc">
+                  <li>CLOUDINARY_CLOUD_NAME</li>
+                  <li>CLOUDINARY_API_KEY</li>
+                  <li>CLOUDINARY_API_SECRET</li>
+                </ul>
+              </li>
+              <li>Faça redeploy</li>
+            </ol>
+          </div>
         </div>
       </div>
     </main>

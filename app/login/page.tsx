@@ -145,30 +145,30 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 px-6 py-12">
+    <main className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 px-4 py-8 sm:px-6 sm:py-12">
       <div className="w-full max-w-md">
-        <div className="relative transition-transform duration-300 hover:scale-[1.02]">
-          <div className="relative mx-auto mb-[-16px] h-6 w-[65%] rounded-3xl bg-gradient-to-b from-gray-50 to-gray-100" />
-          <div className="relative z-10 mx-auto mb-[-20px] h-8 w-[75%] rounded-3xl bg-gradient-to-b from-gray-100 to-gray-200" />
-          <div className="relative z-20 mx-auto mb-[-24px] h-10 w-[85%] rounded-3xl border border-gray-300 bg-white" />
+        <div className="relative">
+          <div className="relative mx-auto mb-[-12px] h-4 w-[65%] rounded-3xl bg-gradient-to-b from-gray-50 to-gray-100 sm:mb-[-16px] sm:h-6" />
+          <div className="relative z-10 mx-auto mb-[-16px] h-6 w-[75%] rounded-3xl bg-gradient-to-b from-gray-100 to-gray-200 sm:mb-[-20px] sm:h-8" />
+          <div className="relative z-20 mx-auto mb-[-20px] h-8 w-[85%] rounded-3xl border border-gray-300 bg-white sm:mb-[-24px] sm:h-10" />
 
-          <div className="relative z-30 rounded-2xl border border-gray-200 bg-white p-10 shadow-xl">
-            <div className="mb-8 text-center">
+          <div className="relative z-30 rounded-2xl border border-gray-200 bg-white p-6 shadow-xl sm:p-10">
+            <div className="mb-6 text-center sm:mb-8">
               <Image
                 src="/ico.png"
                 alt="BUUA Logo"
-                width={70}
-                height={70}
-                className="mx-auto mb-6"
+                width={60}
+                height={60}
+                className="mx-auto mb-4 sm:mb-6 sm:h-[70px] sm:w-[70px]"
               />
-              <h1 className="text-2xl font-light text-gray-700">Bem-vindo à</h1>
-              <div className="relative mt-1 text-5xl font-bold">
+              <h1 className="text-xl font-light text-gray-700 sm:text-2xl">Bem-vindo à</h1>
+              <div className="relative mt-1 text-4xl font-bold sm:text-5xl">
                 <span className="animate-shimmer bg-gradient-to-r from-gray-900 via-gray-600 to-gray-900 bg-[length:200%_100%] bg-clip-text text-transparent">
                   Buua
                 </span>
                 <span className="text-green-500">.</span>
               </div>
-              <p className="mt-6 text-sm font-light leading-relaxed text-gray-600">
+              <p className="mt-4 text-xs font-light leading-relaxed text-gray-600 sm:mt-6 sm:text-sm">
                 Entre ou crie sua conta com o Google para começar a aproveitar nossa plataforma.
               </p>
             </div>
@@ -187,7 +187,7 @@ export default function LoginPage() {
               type="button"
               onClick={handleGoogleAuth}
               disabled={isLoading}
-              className="group mb-6 inline-flex w-full items-center justify-center gap-3 rounded-full border border-gray-200 bg-white px-6 py-4 text-sm font-medium text-gray-700 shadow-md transition-all hover:shadow-xl hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+              className="group mb-4 inline-flex w-full items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-3 text-xs font-medium text-gray-700 shadow-md transition-all hover:shadow-xl hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:mb-6 sm:gap-3 sm:px-6 sm:py-4 sm:text-sm"
             >
               <svg
                 className="h-5 w-5 transition-transform group-hover:scale-110"

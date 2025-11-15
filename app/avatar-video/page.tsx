@@ -66,7 +66,7 @@ export default async function AvatarVideoPage() {
 
   const { data: historyRows, error: historyError } = await supabase
     .from('videos')
-    .select('id, task_id, status, local_video_path, remote_video_url, creditos_utilizados, created_at')
+    .select('id, task_id, status, local_video_path, remote_video_url, creditos_utilizados, created_at, source_video_url')
     .eq('user_email', user.email)
     .order('created_at', { ascending: false })
     .limit(18);
@@ -91,12 +91,13 @@ export default async function AvatarVideoPage() {
           remoteVideoUrl: item.remote_video_url,
           creditosUtilizados: item.creditos_utilizados,
           avatarLabel: 'Avatar',
+          previewVideoUrl: item.source_video_url, // URL do avatar original (para preview enquanto processa)
         })) ?? [];
 
   // Buscar áudios do usuário
   const { data: userAudioRows, error: userAudiosError } = await supabase
     .from('user_audios')
-    .select('id, audio_url, original_filename, extension, created_at')
+    .select('id, audio_url, original_filename, extension, created_at, generated_by_voice_api')
     .eq('user_email', user.email)
     .order('created_at', { ascending: false });
 
@@ -116,6 +117,8 @@ export default async function AvatarVideoPage() {
             id: row.id,
             name: row.original_filename ?? 'Áudio',
             url: row.audio_url ?? '',
+            duration: undefined, // Será calculado no cliente se necessário
+            generatedByVoiceApi: row.generated_by_voice_api ?? false,
           }))
           .filter((audio) => audio.url.length > 0);
 
@@ -123,6 +126,7 @@ export default async function AvatarVideoPage() {
     <AvatarVideoClient
       initialProfile={initialProfile}
       userEmail={user.email}
+      userId={user.id}
       builtinAvatars={builtinAvatars}
       userAvatars={userAvatars}
       userAudios={userAudios}

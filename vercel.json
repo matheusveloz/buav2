@@ -1,0 +1,17 @@
+{
+  "functions": {
+    "app/api/audio/upload/route.ts": {
+      "maxDuration": 300,
+      "memory": 1024
+    },
+    "app/api/**/*.ts": {
+      "maxDuration": 60,
+      "memory": 1024
+    }
+  },
+  "regions": ["iad1"],
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "framework": "nextjs"
+}
+

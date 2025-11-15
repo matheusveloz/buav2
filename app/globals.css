@@ -1,5 +1,127 @@
 @import "tailwindcss";
 @import "plyr-react/plyr.css";
+@import "sweetalert2/dist/sweetalert2.min.css";
+
+/* Hierarquia de Z-INDEX Global */
+:root {
+  --z-index-dropdown: 50;       /* Menus dropdown */
+  --z-index-sticky: 100;        /* Headers sticky */
+  --z-index-fixed: 200;         /* Elementos fixos */
+  --z-index-modal-backdrop: 9997; /* Backdrop dos modais */
+  --z-index-modal: 9998;        /* Modais */
+  --z-index-popover: 9998;     /* Popovers */
+  --z-index-tooltip: 9998;     /* Tooltips */
+  --z-index-toast: 9999;       /* Notificações toast */
+  --z-index-menu: 10000;       /* Menu/Header */
+}
+
+/* SweetAlert2 Customização Profissional - SEM ÍCONES */
+.swal2-container {
+  z-index: 999999 !important;
+  padding: 1rem !important;
+}
+
+.swal2-popup {
+  border-radius: 1.5rem !important;
+  padding: 2rem !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+  border: 1px solid rgba(229, 231, 235, 0.8) !important;
+  max-width: 28rem !important;
+  width: 100% !important;
+}
+
+.swal2-title {
+  font-size: 1.375rem !important;
+  font-weight: 600 !important;
+  color: #111827 !important;
+  margin: 0 0 0.75rem 0 !important;
+  padding: 0 !important;
+}
+
+.swal2-html-container {
+  font-size: 0.9375rem !important;
+  color: #6b7280 !important;
+  margin: 0 !important;
+  padding: 0 0 1.5rem 0 !important;
+  line-height: 1.6 !important;
+}
+
+/* REMOVER TODOS OS ÍCONES DO SWEETALERT2 */
+.swal2-icon {
+  display: none !important;
+}
+
+.swal2-icon.swal2-success,
+.swal2-icon.swal2-error,
+.swal2-icon.swal2-warning,
+.swal2-icon.swal2-info,
+.swal2-icon.swal2-question {
+  display: none !important;
+}
+
+.swal2-actions {
+  margin: 0 !important;
+  padding: 0 !important;
+  gap: 0.75rem !important;
+  display: flex !important;
+  justify-content: center !important;
+}
+
+.swal2-confirm {
+  background: linear-gradient(to right, #10b981, #059669) !important;
+  border: none !important;
+  border-radius: 9999px !important;
+  padding: 0.875rem 2.5rem !important;
+  font-weight: 600 !important;
+  font-size: 0.9375rem !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+  transition: all 0.2s !important;
+  margin: 0 !important;
+  min-width: 140px !important;
+}
+
+.swal2-confirm:hover {
+  background: linear-gradient(to right, #059669, #047857) !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+  transform: translateY(-1px);
+}
+
+.swal2-cancel {
+  background: #ffffff !important;
+  border: 1px solid #d1d5db !important;
+  border-radius: 9999px !important;
+  padding: 0.875rem 2.5rem !important;
+  font-weight: 600 !important;
+  font-size: 0.9375rem !important;
+  color: #6b7280 !important;
+  transition: all 0.2s !important;
+  margin: 0 !important;
+  min-width: 140px !important;
+}
+
+.swal2-cancel:hover {
+  background: #f9fafb !important;
+  border-color: #9ca3af !important;
+  color: #374151 !important;
+}
+
+.swal2-styled:focus {
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.3) !important;
+}
+
+.swal2-timer-progress-bar {
+  background: #10b981 !important;
+}
+
+.swal2-close {
+  color: #9ca3af !important;
+  font-size: 2rem !important;
+  transition: color 0.2s !important;
+}
+
+.swal2-close:hover {
+  color: #374151 !important;
+}
 
 :root {
   --background: #ffffff;
@@ -25,6 +147,15 @@ body {
   color: var(--foreground);
 }
 
+:where(a[href], button, [role="button"], input[type="button"], input[type="submit"], input[type="reset"]) {
+  cursor: pointer;
+}
+
+:where(button, [role="button"], input[type="button"], input[type="submit"], input[type="reset"]):disabled,
+:where([role="button"][aria-disabled="true"], a[aria-disabled="true"]) {
+  cursor: not-allowed;
+}
+
 /* Customização do Plyr com cores verdes */
 .plyr--video {
   --plyr-color-main: #10b981; /* emerald-500 */
@@ -34,25 +165,155 @@ body {
   color: #10b981;
 }
 
-.plyr__control--overlaid {
-  background: linear-gradient(to right, #10b981, #059669);
-  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+/* Forçar vídeos do Plyr na horizontal e tamanho fixo */
+.plyr video {
+  object-fit: cover !important;
+  transform: rotate(0deg) !important;
+  width: 100% !important;
+  height: 100% !important;
 }
 
-.plyr__control--overlaid:hover {
-  background: linear-gradient(to right, #059669, #047857);
+.plyr {
+  width: 100% !important;
+  height: 100% !important;
 }
 
-.plyr__control.plyr__tab-focus,
-.plyr__control:hover,
-.plyr__control[aria-expanded=true] {
-  background: #10b981;
+.plyr__video-wrapper {
+  width: 100% !important;
+  height: 100% !important;
 }
 
-.plyr__menu__container .plyr__control[role=menuitemradio][aria-checked=true]::before {
-  background: #10b981;
+/* Garantir que todos os vídeos do histórico tenham o mesmo tamanho */
+.plyr--video .plyr__video-wrapper video {
+  object-fit: cover !important;
+  width: 100% !important;
+  height: 100% !important;
+  aspect-ratio: 16/9 !important;
 }
 
-.plyr--video .plyr__controls {
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+/* Controle do tamanho do player de vídeo no modal */
+.video-modal-player {
+  width: auto !important;
+  max-width: 90vw !important;
+  max-height: 80vh !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.video-modal-player .plyr {
+  width: auto !important;
+  max-width: 500px !important;
+  max-height: 80vh !important;
+}
+
+.video-modal-player .plyr__video-wrapper {
+  width: auto !important;
+  max-width: 500px !important;
+  max-height: 80vh !important;
+  margin: 0 !important;
+}
+
+.video-modal-player .plyr__video-wrapper video {
+  max-width: 500px !important;
+  max-height: 80vh !important;
+  width: auto !important;
+  height: auto !important;
+  object-fit: contain !important;
+  aspect-ratio: auto !important;
+}
+
+/* Animação de shimmer para texto */
+@keyframes shimmer {
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+/* Animação de shimmer para créditos */
+@keyframes credits-shimmer {
+  0% {
+    background: linear-gradient(90deg, transparent, rgba(16, 185, 129, 0.1), transparent);
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.credits-shimmer {
+  background: linear-gradient(90deg, transparent, rgba(16, 185, 129, 0.1), transparent);
+  animation: credits-shimmer 1.5s ease-in-out;
+}
+
+/* Animação de slide in para novos áudios */
+@keyframes slideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* 3D Transform Utilities */
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.transform-style-3d {
+  transform-style: preserve-3d;
+}
+
+.rotate-y-3 {
+  transform: rotateY(3deg);
+}
+
+.rotate-y-minus-3 {
+  transform: rotateY(-3deg);
+}
+
+/* Glassmorphism enhancements */
+.glass-effect {
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* 3D Card hover effects */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* Glow effect */
+@keyframes glow {
+  0%, 100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.animate-glow {
+  animation: glow 2s ease-in-out infinite;
 }
