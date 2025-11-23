@@ -155,7 +155,19 @@ export async function GET(request: NextRequest) {
   }
 }
 
-async function processTask(task: any, supabase: any) {
+interface GeneratedImageTask {
+  task_id: string;
+  user_email: string;
+  prompt: string;
+  num_images: number;
+  model: string;
+  reference_images?: string[];
+  aspect_ratio?: string;
+  resolution?: string;
+  credits_used?: number;
+}
+
+async function processTask(task: GeneratedImageTask, supabase: ReturnType<typeof createSupabaseAdminClient>) {
   const taskId = task.task_id;
   const userEmail = task.user_email;
   const prompt = task.prompt;
@@ -210,7 +222,18 @@ async function processTask(task: any, supabase: any) {
         console.log(`🎨 [CRON V3] Gerando imagem ${i + 1}/${num}...`);
 
         // Montar payload para Nano Banana 2
-        const requestBody: any = {
+        const requestBody: {
+          contents: Array<{
+            parts: Array<{ text: string } | { inline_data: { mime_type: string; data: string } }>;
+          }>;
+          generationConfig: {
+            responseModalities: string[];
+            imageConfig: {
+              aspectRatio: string;
+              imageSize: string;
+            };
+          };
+        } = {
           contents: [
             {
               parts: [{ text: finalPrompt }], // ✅ Usar prompt traduzido por GPT
