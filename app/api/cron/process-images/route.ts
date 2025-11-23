@@ -126,12 +126,13 @@ async function processTask(task: any, supabase: any) {
             },
           ],
           generationConfig: {
-            responseModalities: ['IMAGE'],
             imageConfig: {
               aspectRatio: task.aspect_ratio || '1:1',
             },
           },
         };
+        
+        console.log(`📦 [CRON V3] Request body:`, JSON.stringify(requestBody).substring(0, 300));
 
         // Adicionar imagens de referência se houver (máximo 4)
         if (referenceImages && referenceImages.length > 0) {
