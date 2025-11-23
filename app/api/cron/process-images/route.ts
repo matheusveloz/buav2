@@ -403,6 +403,23 @@ async function processTask(task: GeneratedImageTask, supabase: ReturnType<typeof
       // ========== PROCESSAR V2 (Gemini 2.5 Flash / Nano Banana) ==========
       console.log(`🍌 [CRON V2] Processando v2-quality: ${taskId}`);
 
+      // ✅ TRADUZIR PROMPT PARA INGLÊS usando OpenAI GPT (mesmo que v3)
+      // Detectar se prompt está em português
+      const portugueseKeywords = ['crie', 'coloque', 'faça', 'gere', 'post', 'instagram', 'sobre', 'para'];
+      const isPortuguese = portugueseKeywords.some(keyword => prompt.toLowerCase().includes(keyword));
+      
+      let finalPrompt = prompt;
+      
+      if (isPortuguese) {
+        console.log(`🌐 [CRON V2] Prompt em português detectado`);
+        console.log(`🌐 [CRON V2] Prompt original: ${prompt}`);
+        
+        // Traduzir usando OpenAI GPT
+        finalPrompt = await translateToEnglish(prompt);
+        
+        console.log(`🌐 [CRON V2] Prompt traduzido: ${finalPrompt}`);
+      }
+
       // Verificar se é image edit ou text2image
       const hasReferenceImages = referenceImages && referenceImages.length > 0;
       const isImageEdit = hasReferenceImages;
@@ -411,10 +428,10 @@ async function processTask(task: GeneratedImageTask, supabase: ReturnType<typeof
       
       if (isImageEdit) {
         console.log(`🎨 [CRON V2] Image Edit com ${referenceImages.length} imagens de referência`);
-        nanoRequestBody = buildImageEditRequest(prompt, referenceImages);
+        nanoRequestBody = buildImageEditRequest(finalPrompt, referenceImages); // ✅ Usar prompt traduzido
       } else {
         console.log(`🎨 [CRON V2] Text-to-Image`);
-        nanoRequestBody = buildText2ImageRequest(prompt);
+        nanoRequestBody = buildText2ImageRequest(finalPrompt); // ✅ Usar prompt traduzido
       }
 
       // Gerar múltiplas imagens em paralelo
