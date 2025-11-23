@@ -99,7 +99,14 @@ async function processTask(task: any, supabase: any) {
   const isV3 = model.includes('gemini-3-pro');
   const isV2 = model.includes('gemini-2.5-flash');
 
-  console.log(`🔧 [CRON] Processando task: ${taskId} (user: ${userEmail}, model: ${model}, version: ${isV3 ? 'v3' : 'v2'})`);
+  console.log(`🔧 [CRON] ===== INÍCIO PROCESSAMENTO =====`);
+  console.log(`🔧 [CRON] TaskId: ${taskId}`);
+  console.log(`🔧 [CRON] User: ${userEmail}`);
+  console.log(`🔧 [CRON] Model: ${model}`);
+  console.log(`🔧 [CRON] Version: ${isV3 ? 'v3' : isV2 ? 'v2' : 'unknown'}`);
+  console.log(`🔧 [CRON] Num images: ${num}`);
+  console.log(`🔧 [CRON] Prompt: ${prompt?.substring(0, 100)}...`);
+  console.log(`🔧 [CRON] API Key disponível: ${!!LAOZHANG_API_KEY}`);
 
   try {
     const startTime = Date.now();
