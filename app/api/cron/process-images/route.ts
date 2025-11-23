@@ -126,8 +126,10 @@ async function processTask(task: any, supabase: any) {
             },
           ],
           generationConfig: {
+            responseModalities: ['IMAGE'], // ✅ OBRIGATÓRIO segundo doc oficial!
             imageConfig: {
               aspectRatio: task.aspect_ratio || '1:1',
+              imageSize: task.resolution || '1K', // Adicionar resolução (1K, 2K, 4K)
             },
           },
         };
@@ -172,7 +174,7 @@ async function processTask(task: any, supabase: any) {
             }
 
             requestBody.contents[0].parts.push({
-              inlineData: { mimeType, data },
+              inline_data: { mimeType, data }, // ✅ CORRIGIDO: inline_data (com underscore)
             });
           }
         }
@@ -226,23 +228,27 @@ async function processTask(task: any, supabase: any) {
           for (let j = candidate.content.parts.length - 1; j >= 0; j--) {
             const part = candidate.content.parts[j];
             console.log(`📦 [CRON V3] Part ${j} keys:`, Object.keys(part));
-            if (part.inlineData) {
+            // A API pode retornar inline_data (underscore) ou inlineData (camelCase)
+            if (part.inline_data || part.inlineData) {
               imagePart = part;
-              console.log(`✅ [CRON V3] InlineData encontrado no part ${j}`);
+              console.log(`✅ [CRON V3] Inline data encontrado no part ${j}`);
               break;
             }
           }
 
-          if (!imagePart || !imagePart.inlineData || !imagePart.inlineData.data) {
+          // Extrair dados da imagem (suporta ambos os formatos)
+          const imageData = imagePart?.inline_data || imagePart?.inlineData;
+          
+          if (!imagePart || !imageData || !imageData.data) {
             console.error(`❌ [CRON V3] Imagem não encontrada. Parts:`, JSON.stringify(candidate.content.parts).substring(0, 500));
             throw new Error('Imagem não encontrada na resposta');
           }
           
-          console.log(`✅ [CRON V3] Base64 data length:`, imagePart.inlineData.data.length);
-          console.log(`✅ [CRON V3] MimeType:`, imagePart.inlineData.mimeType);
+          console.log(`✅ [CRON V3] Base64 data length:`, imageData.data.length);
+          console.log(`✅ [CRON V3] MimeType:`, imageData.mimeType || imageData.mime_type);
 
-          const base64Data = imagePart.inlineData.data;
-          const mimeType = imagePart.inlineData.mimeType || 'image/png';
+          const base64Data = imageData.data;
+          const mimeType = imageData.mimeType || imageData.mime_type || 'image/png';
           const dataUrl = `data:${mimeType};base64,${base64Data}`;
 
           console.log(`📤 [CRON V3] Fazendo upload para Storage... (user: ${userEmail}, taskId: ${taskId}, index: ${i})`);
