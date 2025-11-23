@@ -18,7 +18,7 @@ export type PlanConfig = {
   highlight?: boolean;
 };
 
-export const FREE_INITIAL_CREDITS = 150;
+export const FREE_INITIAL_CREDITS = 90;
 
 const PERCENTAGE_BONUS = 0.1;
 
@@ -37,10 +37,11 @@ export const PLAN_CONFIGS: Record<PlanId, PlanConfig> = {
     concurrentProcesses: 1,
     priorityProcessing: false,
     perks: [
-      '150 créditos iniciais',
+      '90 créditos iniciais',
       'Vídeos de até 30 segundos',
       'Máximo de 3 uploads de avatares',
       '1 processamento por vez',
+      'Gerar até 3 vídeos por dia',
       'Gerar até 3 áudios por dia',
       'Acesso a avatares padrões',
     ],
@@ -74,7 +75,7 @@ export const PLAN_CONFIGS: Record<PlanId, PlanConfig> = {
     id: 'premium',
     name: 'Premium',
     description: 'Para equipes e produtores que exigem prioridade.',
-    priceCents: 24990,
+    priceCents: 14990,
     currency: 'brl',
     includedCredits: 1500,
     bonusPercentage: PERCENTAGE_BONUS,
@@ -101,7 +102,7 @@ export const PLAN_CONFIGS: Record<PlanId, PlanConfig> = {
     id: 'unlimited',
     name: 'Unlimited',
     description: 'Máximo de créditos e processamento para operações críticas.',
-    priceCents: 44990,
+    priceCents: 39990,
     currency: 'brl',
     includedCredits: 4000,
     bonusPercentage: PERCENTAGE_BONUS,

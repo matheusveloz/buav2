@@ -9,6 +9,12 @@
       "memory": 1024
     }
   },
+  "crons": [
+    {
+      "path": "/api/cron/process-images",
+      "schedule": "*/5 * * * *"
+    }
+  ],
   "regions": ["iad1"],
   "buildCommand": "npm run build",
   "outputDirectory": ".next",

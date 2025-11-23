@@ -3,11 +3,25 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { DEFAULT_PROFILE, type Profile } from '@/lib/profile';
+import { SvgIconSprite, SvgIcon } from './svg-icons';
+import { Home, Video, Mic, ImageIcon, Settings, TrendingUp, LogOut, Coins } from 'lucide-react';
 
 const STORAGE_KEY = 'userProfile';
+
+// Ícone customizado para Avatar Video - Pessoa com ondas de voz
+const AvatarVideoIcon = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="8" r="4" />
+    <path d="M12 14c-4 0-7 2-7 4v2h14v-2c0-2-3-4-7-4z" />
+    <path d="M19 10c.5-.5 1-1 1-2" />
+    <path d="M19 6c1 1 2 2 2 4" />
+    <path d="M5 10c-.5-.5-1-1-1-2" />
+    <path d="M5 6c-1 1-2 2-2 4" />
+  </svg>
+);
 
 type ProfileInput = {
   plan?: string | null;
@@ -26,14 +40,14 @@ type AuthenticatedShellProps = {
 
 export function AuthenticatedShell({ initialProfile, userEmail, children }: AuthenticatedShellProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const menuRef = useRef<HTMLDivElement>(null);
   const [profile, setProfile] = useState<Profile>(initialProfile);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [creditsAnimating, setCreditsAnimating] = useState(false);
   const prevCreditsRef = useRef(initialProfile.credits + initialProfile.extraCredits);
-  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [hasCanceledSubscription, setHasCanceledSubscription] = useState(false);
 
   const applyProfile = useCallback((input: ProfileInput) => {
     setProfile((current) => {
@@ -103,7 +117,7 @@ export function AuthenticatedShell({ initialProfile, userEmail, children }: Auth
     const fetchProfile = async () => {
       const { data, error } = await supabase
         .from('emails')
-        .select('plano, creditos, creditos_extras')
+        .select('plano, creditos, creditos_extras, ativo, motivo_bloqueio')
         .eq('email', userEmail)
         .maybeSingle();
 
@@ -113,6 +127,23 @@ export function AuthenticatedShell({ initialProfile, userEmail, children }: Auth
       }
 
       if (data) {
+        // 🔒 VERIFICAR SE CONTA ESTÁ BLOQUEADA
+        if (data.ativo === 0) {
+          console.log('🔒 Conta bloqueada detectada no AuthenticatedShell:', {
+            email: userEmail,
+            ativo: data.ativo,
+            motivo: data.motivo_bloqueio,
+            rota_atual: pathname,
+          });
+          
+          // Se não está na página de conta bloqueada, redireciona
+          if (pathname !== '/conta-bloqueada') {
+            console.log('→ Redirecionando para /conta-bloqueada');
+            router.replace('/conta-bloqueada');
+            return;
+          }
+        }
+        
         applyProfile({
           plano: data.plano,
           creditos: data.creditos,
@@ -122,7 +153,7 @@ export function AuthenticatedShell({ initialProfile, userEmail, children }: Auth
     };
 
     void fetchProfile();
-  }, [userEmail, applyProfile]);
+  }, [userEmail, applyProfile, router, pathname]);
 
   useEffect(() => {
     if (!userEmail) {
@@ -139,9 +170,26 @@ export function AuthenticatedShell({ initialProfile, userEmail, children }: Auth
           table: 'emails',
           filter: `email=eq.${userEmail}`,
         },
-        (payload) => {
+        (payload: any) => {
           const record = (payload.new ?? payload.old) as Record<string, unknown> | null;
           if (record) {
+            // 🔒 VERIFICAR SE CONTA FOI BLOQUEADA EM TEMPO REAL
+            if (record.ativo === 0) {
+              console.log('🔒 Conta bloqueada detectada via realtime:', {
+                email: userEmail,
+                ativo: record.ativo,
+                motivo: record.motivo_bloqueio,
+                rota_atual: pathname,
+              });
+              
+              // Se não está na página de conta bloqueada, redireciona
+              if (pathname !== '/conta-bloqueada') {
+                console.log('→ Redirecionando para /conta-bloqueada (realtime)');
+                router.replace('/conta-bloqueada');
+                return;
+              }
+            }
+            
             applyProfile({
               plano: record.plano as string,
               creditos: record.creditos as number,
@@ -155,7 +203,7 @@ export function AuthenticatedShell({ initialProfile, userEmail, children }: Auth
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userEmail, applyProfile]);
+  }, [userEmail, applyProfile, router, pathname]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -187,6 +235,26 @@ export function AuthenticatedShell({ initialProfile, userEmail, children }: Auth
     };
   }, []);
 
+  // Verificar assinatura cancelada
+  useEffect(() => {
+    if (!userEmail) return;
+
+    const checkSubscription = async () => {
+      try {
+        const response = await fetch('/api/stripe/subscription');
+        const data = await response.json();
+        
+        if (data.subscription && data.subscription.status === 'cancelada') {
+          setHasCanceledSubscription(true);
+        }
+      } catch (error) {
+        console.error('Erro ao verificar assinatura:', error);
+      }
+    };
+
+    void checkSubscription();
+  }, [userEmail]);
+
   const handleSignOut = useCallback(async () => {
     if (typeof window !== 'undefined') {
       try {
@@ -199,21 +267,6 @@ export function AuthenticatedShell({ initialProfile, userEmail, children }: Auth
     await supabase.auth.signOut();
     router.replace('/');
   }, [router]);
-
-  // Handlers para dropdowns com delay
-  const handleMouseEnterDropdown = (dropdown: string) => {
-    if (closeTimeoutRef.current) {
-      clearTimeout(closeTimeoutRef.current);
-      closeTimeoutRef.current = null;
-    }
-    setOpenDropdown(dropdown);
-  };
-
-  const handleMouseLeaveDropdown = () => {
-    closeTimeoutRef.current = setTimeout(() => {
-      setOpenDropdown(null);
-    }, 300); // 300ms delay antes de fechar
-  };
 
   const totalCredits = profile.credits + profile.extraCredits;
   const formattedCredits = new Intl.NumberFormat('pt-BR').format(Math.max(totalCredits, 0));
@@ -236,21 +289,45 @@ export function AuthenticatedShell({ initialProfile, userEmail, children }: Auth
     }
   }, [profile.credits, profile.extraCredits]);
 
-  // Listener para forçar reload do perfil quando créditos forem descontados
+  // Listener para atualizar créditos em tempo real
   useEffect(() => {
-    const handleCreditsDeducted = async () => {
-      // Forçar reload dos créditos do banco
-      const { data } = await supabase
-        .from('emails')
-        .select('plano, creditos, creditos_extras')
-        .eq('email', userEmail)
-        .maybeSingle();
-
-      if (data) {
+    const handleCreditsDeducted = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      
+      // Se vier com valores absolutos (credits/extraCredits)
+      if (customEvent.detail && typeof customEvent.detail.credits === 'number') {
         applyProfile({
-          plano: data.plano,
-          creditos: data.creditos,
-          creditos_extras: data.creditos_extras,
+          creditos: customEvent.detail.credits,
+          creditos_extras: customEvent.detail.extraCredits || 0,
+        });
+      }
+      // Se vier com valor a deduzir (amount)
+      else if (customEvent.detail && typeof customEvent.detail.amount === 'number') {
+        const amountToDeduct = customEvent.detail.amount;
+        const currentTotal = profile.credits + profile.extraCredits;
+        const newTotal = Math.max(0, currentTotal - amountToDeduct);
+        
+        // Deduz primeiro dos créditos extras, depois dos regulares
+        let newExtraCredits = profile.extraCredits;
+        let newRegularCredits = profile.credits;
+        
+        if (amountToDeduct > 0) {
+          // Deduzindo
+          if (newExtraCredits >= amountToDeduct) {
+            newExtraCredits -= amountToDeduct;
+          } else {
+            const remaining = amountToDeduct - newExtraCredits;
+            newExtraCredits = 0;
+            newRegularCredits = Math.max(0, newRegularCredits - remaining);
+          }
+        } else {
+          // Adicionando (quando amount é negativo)
+          newExtraCredits += Math.abs(amountToDeduct);
+        }
+        
+        applyProfile({
+          creditos: newRegularCredits,
+          creditos_extras: newExtraCredits,
         });
       }
     };
@@ -260,394 +337,381 @@ export function AuthenticatedShell({ initialProfile, userEmail, children }: Auth
     return () => {
       window.removeEventListener('creditsDeducted', handleCreditsDeducted);
     };
-  }, [userEmail, applyProfile]);
+  }, [applyProfile, profile.credits, profile.extraCredits]);
+
+  const menuItems = [
+    {
+      href: '/home',
+      label: 'Home',
+      Icon: Home,
+    },
+    {
+      href: '/avatar-video',
+      label: 'Vídeo Avatar',
+      Icon: AvatarVideoIcon,
+    },
+    {
+      href: '/create-voice',
+      label: 'Criar Voz',
+      Icon: Mic,
+    },
+    {
+      href: '/image-generator',
+      label: 'Gerar Imagem',
+      Icon: ImageIcon,
+    },
+    {
+      href: '/video-generator',
+      label: 'Gerar Vídeo',
+      Icon: Video,
+    },
+  ];
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      <header className="relative z-40 border-b border-gray-200/50 bg-white/60 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-          <Link href="/home" className="flex items-center gap-3 transition hover:opacity-80">
-            <Image src="/ico.png" alt="BUUA Logo" width={40} height={40} className="rounded-lg sm:h-12 sm:w-12" />
-            <span className="text-xl font-bold sm:text-2xl">
+    <div className="relative flex min-h-screen bg-gradient-to-br from-gray-50 to-gray-100" style={{ minHeight: '100vh' }}>
+      {/* SVG Icon Sprite */}
+      <SvgIconSprite />
+      
+      {/* Sidebar Lateral Esquerda - Desktop */}
+      <aside className="hidden lg:flex fixed left-0 top-0 h-screen w-56 flex-col border-r border-gray-200/50 bg-white/80 backdrop-blur-xl z-40">
+        {/* Logo no topo */}
+        <div className="border-b border-gray-200/50 p-4">
+          <Link href="/home" className="flex items-center gap-2 transition hover:opacity-80">
+            <Image src="/ico.png" alt="BUUA Logo" width={32} height={32} className="rounded-lg" />
+            <span className="text-lg font-bold">
+              <span className="text-gray-900">Buua</span>
+              <span className="text-green-500">.</span>
+            </span>
+          </Link>
+        </div>
+
+        {/* Navigation Menu */}
+        <nav className="flex-1 overflow-y-auto p-3 space-y-1.5">
+          {menuItems.map((item) => {
+            const isActive = pathname === item.href;
+            const Icon = item.Icon;
+            
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`group flex items-center gap-2.5 rounded-xl px-3 py-2.5 transition-all duration-200 ${
+                  isActive
+                    ? 'bg-[#c7f9e0]'
+                    : 'hover:bg-gray-100'
+                }`}
+              >
+                <Icon 
+                  className={`w-5 h-5 transition-all duration-200 ${
+                    isActive 
+                      ? 'text-[#4b5563]' 
+                      : 'text-[#4b5563] group-hover:scale-110 group-hover:rotate-6'
+                  }`}
+                  strokeWidth={2}
+                />
+                <span className={`text-sm font-medium text-[#4b5563] ${isActive ? 'font-semibold' : ''}`}>
+                  {item.label}
+                </span>
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Footer da Sidebar - Créditos e Menu do Usuário */}
+        <div className="border-t border-gray-200/50 p-3 space-y-1.5">
+          {/* Créditos */}
+          <div className={`relative flex items-center gap-2.5 rounded-xl border px-3 py-2.5 shadow-sm transition-all duration-500 ${
+            creditsAnimating 
+              ? 'scale-105 border-emerald-400 bg-emerald-50 ring-2 ring-emerald-200' 
+              : 'border-gray-200 bg-white'
+          }`}>
+            {creditsAnimating && (
+              <div className="absolute inset-0 credits-shimmer pointer-events-none rounded-xl" />
+            )}
+            <SvgIcon 
+              name="coin"
+              width={18}
+              height={18}
+              className={`transition-all duration-500 flex-shrink-0 ${
+                creditsAnimating ? 'text-emerald-500 rotate-12 scale-125' : 'text-yellow-500'
+              }`}
+              style={{ fill: 'currentColor', stroke: 'none' }}
+            />
+            <div className="flex flex-col flex-1 min-w-0">
+              <span className={`text-sm font-bold transition-all duration-500 ${
+                creditsAnimating ? 'text-emerald-700' : 'text-gray-900'
+              }`}>
+                {formattedCredits}
+              </span>
+              <span className="text-[10px] text-gray-500 capitalize">{displayPlan}</span>
+            </div>
+          </div>
+
+          {/* Informação do Usuário */}
+          <div className="rounded-xl bg-gray-50/50 px-3 py-2.5 border border-gray-100">
+            <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wide">Conectado como</p>
+            <p className="text-xs text-gray-900 font-semibold truncate mt-1">{userEmail || '—'}</p>
+          </div>
+
+          {/* Links de Configurações e Upgrade */}
+          <div className="space-y-0.5">
+            <Link
+              href="/configuracoes"
+              className={`group flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm transition-all duration-200 ${
+                pathname === '/configuracoes'
+                  ? 'bg-[#c7f9e0]'
+                  : 'hover:bg-gray-100'
+              }`}
+            >
+              <Settings 
+                className={`w-5 h-5 transition-all duration-200 ${
+                  pathname === '/configuracoes'
+                    ? 'text-[#4b5563]'
+                    : 'text-[#4b5563] group-hover:scale-110 group-hover:rotate-12'
+                }`}
+                strokeWidth={2}
+              />
+              <span className={`font-medium text-[#4b5563] ${pathname === '/configuracoes' ? 'font-semibold' : ''}`}>
+                Configurações
+              </span>
+            </Link>
+
+            <Link
+              href="/upgrade"
+              className={`group flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm transition-all duration-200 ${
+                pathname === '/upgrade'
+                  ? 'bg-[#c7f9e0]'
+                  : 'hover:bg-gray-100'
+              }`}
+            >
+              <TrendingUp 
+                className={`w-5 h-5 transition-all duration-200 ${
+                  pathname === '/upgrade'
+                    ? 'text-[#4b5563]'
+                    : 'text-[#4b5563] group-hover:scale-110 group-hover:translate-y-[-2px]'
+                }`}
+                strokeWidth={2}
+              />
+              <span className={`font-medium text-[#4b5563] ${pathname === '/upgrade' ? 'font-semibold' : ''}`}>
+                Fazer Upgrade
+              </span>
+            </Link>
+
+            <Link
+              href="/buy-credits"
+              className={`group flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm transition-all duration-200 ${
+                pathname === '/buy-credits'
+                  ? 'bg-[#c7f9e0]'
+                  : 'hover:bg-gray-100'
+              }`}
+            >
+              <Coins 
+                className={`w-5 h-5 transition-all duration-200 ${
+                  pathname === '/buy-credits'
+                    ? 'text-[#4b5563]'
+                    : 'text-[#4b5563] group-hover:scale-110 group-hover:rotate-12'
+                }`}
+                strokeWidth={2}
+              />
+              <span className={`font-medium text-[#4b5563] ${pathname === '/buy-credits' ? 'font-semibold' : ''}`}>
+                Comprar Créditos
+              </span>
+            </Link>
+
+            <button
+              onClick={handleSignOut}
+              className="group flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm transition-all duration-200 hover:bg-red-50"
+            >
+              <LogOut 
+                className="w-5 h-5 text-red-600 transition-all duration-200 group-hover:scale-110 group-hover:translate-x-1"
+                strokeWidth={2}
+              />
+              <span className="font-medium text-red-600">Sair</span>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      {/* Mobile Header com Menu Hambúrguer */}
+      <header className="lg:hidden fixed top-0 left-0 right-0 z-30 border-b border-gray-200/50 bg-white/60 backdrop-blur-xl">
+        <div className="flex items-center justify-between px-4 py-3">
+          <Link href="/home" className="flex items-center gap-2">
+            <Image src="/ico.png" alt="BUUA Logo" width={32} height={32} className="rounded-lg" />
+            <span className="text-lg font-bold">
               <span className="text-gray-900">Buua</span>
               <span className="text-green-500">.</span>
             </span>
           </Link>
 
-          {/* Central Navigation Menu - Desktop */}
-          <nav className="hidden lg:flex items-center gap-3">
-            {/* Home */}
-            <Link 
-              href="/home"
-              className="group relative flex items-center justify-center w-12 h-12 rounded-2xl bg-white/40 backdrop-blur-md border border-white/60 shadow-lg hover:shadow-xl hover:scale-110 transition-all duration-300 hover:bg-gradient-to-br hover:from-purple-50/80 hover:to-pink-50/80"
-            >
-              <svg className="w-5 h-5 text-gray-700 group-hover:text-purple-600 transition-colors" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-              </svg>
-              <div className="absolute -bottom-12 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
-                <div className="bg-gray-900/90 text-white text-xs px-3 py-1.5 rounded-lg backdrop-blur-sm">Home</div>
-              </div>
-            </Link>
-
-            {/* Avatar (with dropdown) */}
-            <div 
-              className="relative"
-              onMouseEnter={() => handleMouseEnterDropdown('avatar')}
-              onMouseLeave={handleMouseLeaveDropdown}
-            >
-              <button 
-                className="group relative flex items-center justify-center w-12 h-12 rounded-2xl bg-white/40 backdrop-blur-md border border-white/60 shadow-lg hover:shadow-xl hover:scale-110 transition-all duration-300 hover:bg-gradient-to-br hover:from-purple-50/80 hover:to-pink-50/80"
-              >
-                <svg className="w-6 h-6 text-gray-700 group-hover:text-purple-600 transition-colors" viewBox="0 0 32 32" fill="currentColor">
-                  <path d="M10.906 13.114c1.415-2.462 4.647-2.958 6.797-1.492a4.94 4.94 0 0 1 2.744-.816c1.579 0 3.217.711 4.308 2.13.623.81 1.223 1.483 1.762 2.025l.035.032.343.334a12.328 12.328 0 0 0 .954.814c.264.198.454.313.554.359.44.202.765.592.884 1.061.048.19.058.383.036.572a1.597 1.597 0 0 1-.499 1.028c-.736.94-1.888 2.2-3.407 3.324-.028.021-.059.04-.088.058-1.964 1.438-4.544 2.657-7.632 2.657-2.214 0-4.379-.837-6.18-1.876-.009-.005-.019-.008-.028-.014a17.73 17.73 0 0 1-.347-.207l-.21-.13a19.73 19.73 0 0 1-.44-.285 18.199 18.199 0 0 1-.393-.269l-.09-.064c-1.493-1.059-2.73-2.245-3.463-3.212a1.599 1.599 0 0 1-.48-1.056 1.6 1.6 0 0 1 .926-1.588l.026-.013c.018-.01.044-.023.076-.042a10.145 10.145 0 0 0 .37-.235 14.66 14.66 0 0 0 .68-.479c.514-.38 1.086-.839 1.593-1.307l.014-.013c.552-.51.97-.972 1.155-1.296Zm13.098 3.755c-4.833.489-9.187.36-12.286.074-.544.488-1.12.952-1.64 1.338.65.622 1.507 1.317 2.494 1.943 2.92.212 6.622.273 10.683-.07.075-.088.161-.169.258-.24a14.594 14.594 0 0 0 1.863-1.656 16.33 16.33 0 0 1-.7-.624l-.388-.38-.11-.12a1.596 1.596 0 0 1-.174-.265Z" />
-                </svg>
-              </button>
-              
-              {openDropdown === 'avatar' && (
-                <div 
-                  className="absolute top-full left-0 mt-2 w-48 rounded-2xl bg-white/90 backdrop-blur-xl border border-white/60 shadow-2xl overflow-hidden z-50"
-                  onMouseEnter={() => handleMouseEnterDropdown('avatar')}
-                  onMouseLeave={handleMouseLeaveDropdown}
-                >
-                  <Link 
-                    href="/avatar-video" 
-                    className="flex items-center gap-3 px-4 py-3 hover:bg-gradient-to-r hover:from-purple-50/80 hover:to-pink-50/80 transition-colors group"
-                  >
-                    <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-purple-400 to-pink-500 shadow-md group-hover:scale-110 transition-transform">
-                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                    <span className="text-sm font-medium text-gray-900">Vídeo Avatar</span>
-                  </Link>
-                </div>
-              )}
+          <div className="flex items-center gap-3">
+            {/* Créditos - Mobile */}
+            <div className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 shadow-sm transition-all ${
+              creditsAnimating ? 'border-emerald-400 bg-emerald-50' : 'border-gray-200 bg-white'
+            }`}>
+              <SvgIcon 
+                name="coin"
+                width={16}
+                height={16}
+                className={creditsAnimating ? 'text-emerald-500' : 'text-yellow-500'}
+                style={{ fill: 'currentColor', stroke: 'none' }}
+              />
+              <span className="text-xs font-semibold text-gray-900">{formattedCredits}</span>
             </div>
 
-            {/* Voice (with dropdown) */}
-            <div 
-              className="relative"
-              onMouseEnter={() => handleMouseEnterDropdown('voice')}
-              onMouseLeave={handleMouseLeaveDropdown}
+            {/* Botão Menu Hambúrguer */}
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="flex h-10 w-10 items-center justify-center rounded-lg bg-white border border-gray-200 shadow-sm"
             >
-              <button 
-                className="group relative flex items-center justify-center w-12 h-12 rounded-2xl bg-white/40 backdrop-blur-md border border-white/60 shadow-lg hover:shadow-xl hover:scale-110 transition-all duration-300 hover:bg-gradient-to-br hover:from-blue-50/80 hover:to-cyan-50/80"
-              >
-                <svg className="w-5 h-5 text-gray-700 group-hover:text-blue-600 transition-colors" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                </svg>
-              </button>
-
-              {openDropdown === 'voice' && (
-                <div 
-                  className="absolute top-full left-0 mt-2 w-48 rounded-2xl bg-white/90 backdrop-blur-xl border border-white/60 shadow-2xl overflow-hidden z-50"
-                  onMouseEnter={() => handleMouseEnterDropdown('voice')}
-                  onMouseLeave={handleMouseLeaveDropdown}
-                >
-                  <Link 
-                    href="/create-voice" 
-                    className="flex items-center gap-3 px-4 py-3 hover:bg-gradient-to-r hover:from-blue-50/80 hover:to-cyan-50/80 transition-colors group"
-                  >
-                    <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-blue-400 to-cyan-500 shadow-md group-hover:scale-110 transition-transform">
-                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                      </svg>
-                    </div>
-                    <span className="text-sm font-medium text-gray-900">Criar Voz</span>
-                  </Link>
-                </div>
-              )}
-            </div>
-
-            {/* Image (with dropdown) */}
-            <div 
-              className="relative"
-              onMouseEnter={() => handleMouseEnterDropdown('image')}
-              onMouseLeave={handleMouseLeaveDropdown}
-            >
-              <button 
-                className="group relative flex items-center justify-center w-12 h-12 rounded-2xl bg-white/40 backdrop-blur-md border border-white/60 shadow-lg hover:shadow-xl hover:scale-110 transition-all duration-300 hover:bg-gradient-to-br hover:from-emerald-50/80 hover:to-lime-50/80"
-              >
-                <svg className="w-5 h-5 text-gray-700 group-hover:text-emerald-600 transition-colors" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </button>
-              
-              {openDropdown === 'image' && (
-                <div 
-                  className="absolute top-full left-0 mt-2 w-48 rounded-2xl bg-white/90 backdrop-blur-xl border border-white/60 shadow-2xl overflow-hidden z-50"
-                  onMouseEnter={() => handleMouseEnterDropdown('image')}
-                  onMouseLeave={handleMouseLeaveDropdown}
-                >
-                  <button className="flex items-center gap-3 px-4 py-3 hover:bg-gradient-to-r hover:from-emerald-50/80 hover:to-lime-50/80 transition-colors group w-full">
-                    <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-400 to-lime-500 shadow-md group-hover:scale-110 transition-transform">
-                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                    <span className="text-sm font-medium text-gray-900">Gerar Imagem</span>
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Video (with dropdown) */}
-            <div 
-              className="relative"
-              onMouseEnter={() => handleMouseEnterDropdown('video')}
-              onMouseLeave={handleMouseLeaveDropdown}
-            >
-              <button 
-                className="group relative flex items-center justify-center w-12 h-12 rounded-2xl bg-white/40 backdrop-blur-md border border-white/60 shadow-lg hover:shadow-xl hover:scale-110 transition-all duration-300 hover:bg-gradient-to-br hover:from-orange-50/80 hover:to-yellow-50/80"
-              >
-                <svg className="w-5 h-5 text-gray-700 group-hover:text-orange-600 transition-colors" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-              </button>
-              
-              {openDropdown === 'video' && (
-                <div 
-                  className="absolute top-full left-0 mt-2 w-auto rounded-2xl bg-white/90 backdrop-blur-xl border border-white/60 shadow-2xl overflow-hidden z-50"
-                  onMouseEnter={() => handleMouseEnterDropdown('video')}
-                  onMouseLeave={handleMouseLeaveDropdown}
-                >
-                  <button className="flex items-center gap-3 px-4 py-3 hover:bg-gradient-to-r hover:from-orange-50/80 hover:to-yellow-50/80 transition-colors group w-full whitespace-nowrap">
-                    <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-orange-400 to-yellow-500 shadow-md group-hover:scale-110 transition-transform">
-                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </div>
-                    <span className="text-sm font-medium text-gray-900">Animar imagem ou texto</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          </nav>
-
-          {/* Desktop menu */}
-          <div className="hidden items-center gap-4 sm:flex">
-            <div 
-              className={`relative flex items-center gap-2 rounded-full border px-3 py-1.5 shadow-sm transition-all duration-500 overflow-hidden sm:px-4 sm:py-2 ${
-                creditsAnimating 
-                  ? 'scale-110 border-emerald-400 bg-emerald-50 ring-2 ring-emerald-200' 
-                  : 'border-gray-200 bg-white'
-              }`}
-            >
-              {creditsAnimating && (
-                <div className="absolute inset-0 credits-shimmer pointer-events-none" />
-              )}
-              <svg 
-                className={`h-4 w-4 transition-all duration-500 sm:h-5 sm:w-5 ${
-                  creditsAnimating ? 'text-emerald-500 rotate-12 scale-125' : 'text-yellow-500'
-                }`} 
-                fill="currentColor" 
-                viewBox="0 0 24 24"
-              >
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.31-8.86c-1.77-.45-2.34-.94-2.34-1.67 0-.84.79-1.43 2.1-1.43 1.38 0 1.9.66 1.94 1.64h1.71c-.05-1.34-.87-2.57-2.49-2.97V5H10.9v1.69c-1.51.32-2.72 1.3-2.72 2.81 0 1.79 1.49 2.69 3.66 3.21 1.95.46 2.34 1.15 2.34 1.87 0 .53-.39 1.39-2.1 1.39-1.6 0-2.23-.72-2.32-1.64H8.04c.1 1.7 1.36 2.66 2.86 2.97V19h2.34v-1.67c1.52-.29 2.72-1.16 2.73-2.77-.01-2.2-1.9-2.96-3.66-3.42z" />
-              </svg>
-              <span 
-                className={`relative text-sm font-semibold transition-all duration-500 sm:text-base ${
-                  creditsAnimating ? 'text-emerald-700 scale-110' : 'text-gray-900'
-                }`}
-              >
-                {formattedCredits}
-              </span>
-              <span className="text-xs text-gray-500 capitalize transition-all duration-300">{displayPlan}</span>
-            </div>
-
-            <div className="relative" ref={menuRef}>
-              <button
-                onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                className="relative z-10 flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-green-400 to-green-600 text-white shadow-md transition hover:shadow-lg"
-              >
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-              </button>
-
-              {isUserMenuOpen && (
-                <div className="absolute right-0 z-50 mt-2 w-64 rounded-xl border border-gray-200 bg-white shadow-2xl">
-                  <div className="border-b border-gray-100 p-4">
-                    <p className="text-xs text-gray-500">Conectado como</p>
-                    <p className="mt-1 truncate text-sm font-medium text-gray-900">{userEmail || '—'}</p>
-                  </div>
-
-                  <div className="py-2">
-                    <Link
-                      href="/configuracoes"
-                      className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50"
-                    >
-                      <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                        />
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                        />
-                      </svg>
-                      Configurações
-                    </Link>
-
-                    <Link
-                      href="/upgrade"
-                      className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50"
-                    >
-                      <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M3 17l6-6 4 4 7-7M14 4h7v7"
-                        />
-                      </svg>
-                      Upgrade
-                    </Link>
-
-                    <button className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50">
-                      <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
-                        />
-                      </svg>
-                      Comprar créditos
-                    </button>
-                  </div>
-
-                  <div className="border-t border-gray-100 py-2">
-                    <button
-                      onClick={handleSignOut}
-                      className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-red-600 transition hover:bg-red-50"
-                    >
-                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                      </svg>
-                      Sair
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+              <SvgIcon 
+                name={isMobileMenuOpen ? 'close' : 'menu'}
+                width={20}
+                height={20}
+                className="text-gray-700"
+              />
+            </button>
           </div>
-
-          {/* Mobile menu button */}
-          <button
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="flex items-center sm:hidden"
-          >
-            <svg className="h-6 w-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              {isMobileMenuOpen ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              )}
-            </svg>
-          </button>
         </div>
 
-        {/* Mobile menu */}
+        {/* Mobile Menu Dropdown */}
         {isMobileMenuOpen && (
-          <div className="border-t border-gray-200 bg-white sm:hidden">
-            <div className="space-y-1 px-4 pb-3 pt-2">
-              <div 
-                className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${
-                  creditsAnimating 
-                    ? 'border-emerald-400 bg-emerald-50' 
-                    : 'border-gray-200 bg-gray-50'
-                }`}
-              >
-                <svg 
-                  className={`h-5 w-5 ${
-                    creditsAnimating ? 'text-emerald-500' : 'text-yellow-500'
-                  }`} 
-                  fill="currentColor" 
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.31-8.86c-1.77-.45-2.34-.94-2.34-1.67 0-.84.79-1.43 2.1-1.43 1.38 0 1.9.66 1.94 1.64h1.71c-.05-1.34-.87-2.57-2.49-2.97V5H10.9v1.69c-1.51.32-2.72 1.3-2.72 2.81 0 1.79 1.49 2.69 3.66 3.21 1.95.46 2.34 1.15 2.34 1.87 0 .53-.39 1.39-2.1 1.39-1.6 0-2.23-.72-2.32-1.64H8.04c.1 1.7 1.36 2.66 2.86 2.97V19h2.34v-1.67c1.52-.29 2.72-1.16 2.73-2.77-.01-2.2-1.9-2.96-3.66-3.42z" />
-                </svg>
-                <span className="font-semibold text-gray-900">{formattedCredits}</span>
-                <span className="text-sm text-gray-500 capitalize">{displayPlan}</span>
-              </div>
+          <div className="border-t border-gray-200/50 bg-white/95 backdrop-blur-xl shadow-lg">
+            <nav className="space-y-1 p-4">
+              {menuItems.map((item) => {
+                const isActive = pathname === item.href;
+                const Icon = item.Icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={`group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200 ${
+                      isActive
+                        ? 'bg-[#c7f9e0]'
+                        : 'hover:bg-gray-100'
+                    }`}
+                  >
+                    <Icon 
+                      className={`w-5 h-5 transition-all duration-200 ${
+                        isActive 
+                          ? 'text-[#4b5563]' 
+                          : 'text-[#4b5563] group-hover:scale-110 group-hover:rotate-6'
+                      }`}
+                      strokeWidth={2}
+                    />
+                    <span className="text-[#4b5563]">{item.label}</span>
+                  </Link>
+                );
+              })}
+              
+              <div className="border-t border-gray-200 pt-3 mt-3 space-y-1">
+                <div className="rounded-lg bg-gray-50/70 px-3 py-2 mb-3">
+                  <p className="text-[10px] text-gray-500 font-medium">Conectado como</p>
+                  <p className="text-xs text-gray-900 font-medium truncate mt-0.5">{userEmail || '—'}</p>
+                </div>
 
-              <div className="mt-3 space-y-1">
-                <p className="px-3 py-1 text-xs text-gray-500">Conectado como</p>
-                <p className="truncate px-3 text-sm font-medium text-gray-900">{userEmail || '—'}</p>
-              </div>
-
-              <div className="mt-3 space-y-1">
                 <Link
                   href="/configuracoes"
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200 ${
+                    pathname === '/configuracoes'
+                      ? 'bg-[#c7f9e0]'
+                      : 'hover:bg-gray-100'
+                  }`}
                 >
-                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                    />
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                    />
-                  </svg>
-                  Configurações
+                  <Settings 
+                    className={`w-5 h-5 transition-all duration-200 ${
+                      pathname === '/configuracoes'
+                        ? 'text-[#4b5563]'
+                        : 'text-[#4b5563] group-hover:scale-110 group-hover:rotate-12'
+                    }`}
+                    strokeWidth={2}
+                  />
+                  <span className="text-[#4b5563]">Configurações</span>
                 </Link>
 
                 <Link
                   href="/upgrade"
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200 ${
+                    pathname === '/upgrade'
+                      ? 'bg-[#c7f9e0]'
+                      : 'hover:bg-gray-100'
+                  }`}
                 >
-                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M3 17l6-6 4 4 7-7M14 4h7v7"
-                    />
-                  </svg>
-                  Upgrade
+                  <TrendingUp 
+                    className={`w-5 h-5 transition-all duration-200 ${
+                      pathname === '/upgrade'
+                        ? 'text-[#4b5563]'
+                        : 'text-[#4b5563] group-hover:scale-110 group-hover:translate-y-[-2px]'
+                    }`}
+                    strokeWidth={2}
+                  />
+                  <span className="text-[#4b5563]">Fazer Upgrade</span>
                 </Link>
 
-                <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
-                    />
-                  </svg>
-                  Comprar créditos
-                </button>
+                <Link
+                  href="/buy-credits"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200 ${
+                    pathname === '/buy-credits'
+                      ? 'bg-[#c7f9e0]'
+                      : 'hover:bg-gray-100'
+                  }`}
+                >
+                  <Coins 
+                    className={`w-5 h-5 transition-all duration-200 ${
+                      pathname === '/buy-credits'
+                        ? 'text-[#4b5563]'
+                        : 'text-[#4b5563] group-hover:scale-110 group-hover:rotate-12'
+                    }`}
+                    strokeWidth={2}
+                  />
+                  <span className="text-[#4b5563]">Comprar Créditos</span>
+                </Link>
 
                 <button
-                  onClick={handleSignOut}
-                  className="mt-2 flex w-full items-center gap-3 rounded-lg border-t border-gray-200 px-3 py-2 pt-3 text-sm text-red-600 hover:bg-red-50"
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    handleSignOut();
+                  }}
+                  className="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200 hover:bg-red-50"
                 >
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                  </svg>
-                  Sair
+                  <LogOut 
+                    className="w-5 h-5 text-red-600 transition-all duration-200 group-hover:scale-110 group-hover:translate-x-1"
+                    strokeWidth={2}
+                  />
+                  <span className="text-red-600">Sair da Conta</span>
                 </button>
               </div>
-            </div>
+            </nav>
           </div>
         )}
       </header>
 
-      <main className="relative z-0 mx-auto max-w-7xl py-6 sm:py-12">{children}</main>
+      {/* Conteúdo Principal - Unificado para Desktop e Mobile */}
+      <div className="lg:ml-56 pt-16 lg:pt-0 flex-1 bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
+        {/* Banner de Assinatura Cancelada */}
+        {hasCanceledSubscription && profile.plan !== 'free' && (
+          <div className="bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-3 text-center text-sm text-white shadow-md">
+            <p className="font-medium">
+              ⚠️ Sua assinatura foi cancelada. Você ainda tem acesso ao plano {displayPlan} e seus créditos até esgotá-los.
+            </p>
+            <Link 
+              href="/configuracoes" 
+              className="ml-2 font-semibold underline hover:text-white/90"
+            >
+              Reativar Assinatura
+            </Link>
+          </div>
+        )}
+
+        <main className="relative z-0 py-6 sm:py-8 lg:py-10 px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto w-full max-w-[1600px]">
+            {children}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

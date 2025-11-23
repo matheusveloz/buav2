@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { createSupabaseServerClient } from '@/lib/supabase-server';
+import { blockIfAccountBlocked } from '@/lib/account-status';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2025-02-24.acacia',
@@ -70,6 +71,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
+    // Verificar se conta está bloqueada
+    const blockedResponse = await blockIfAccountBlocked(user.email);
+    if (blockedResponse) {
+      return blockedResponse;
+    }
+
     const body = await request.json();
     const plan = body.plan || body.planId;
 
@@ -80,7 +87,7 @@ export async function POST(request: NextRequest) {
     const planConfig = PLAN_CONFIGS[plan as keyof typeof PLAN_CONFIGS];
 
     // Obter URL base do request
-    const origin = request.headers.get('origin') || request.headers.get('referer')?.split('/upgrade')[0] || process.env.NEXT_PUBLIC_SITE_URL || 'https://buav2.vercel.app';
+    const origin = request.headers.get('origin') || request.headers.get('referer')?.split('/upgrade')[0] || process.env.NEXT_PUBLIC_SITE_URL || 'https://buua.app';
 
     // Criar sessão de checkout da Stripe no MODO ASSINATURA
     const session = await stripe.checkout.sessions.create({

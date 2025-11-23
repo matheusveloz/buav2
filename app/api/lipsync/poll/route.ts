@@ -174,18 +174,6 @@ export async function POST(request: Request) {
 
     const videoUrl = data.data?.videos?.[0]?.videoUrl;
     const videoType = data.data?.videos?.[0]?.videoType ?? 'mp4';
-    const sttTotalLengthMs =
-      typeof data.data?.sttResult?.tl === 'number' ? data.data.sttResult.tl : undefined;
-    const executionTimeMs =
-      typeof data.data?.task?.executionTime === 'number'
-        ? data.data.task.executionTime
-        : undefined;
-
-    console.log('📊 Dados brutos da API Newport:', {
-      sttTotalLengthMs,
-      executionTimeMs,
-      hasVideo: !!videoUrl,
-    });
 
     if (!videoUrl) {
       return NextResponse.json(
@@ -241,31 +229,11 @@ export async function POST(request: Request) {
       }
     }
 
-    // AGORA calcular duração e créditos DEPOIS de processar o vídeo
-    // Prioridade: usar duração do áudio retornado pela API
-    let durationSeconds = 0;
-    
-    if (sttTotalLengthMs !== undefined && sttTotalLengthMs > 0) {
-      durationSeconds = Math.floor(sttTotalLengthMs);
-      console.log('📊 Usando duração do áudio (sttResult.tl):', {
-        rawValue: sttTotalLengthMs,
-        durationSeconds,
-      });
-    } else if (executionTimeMs !== undefined && executionTimeMs > 0) {
-      // Último recurso: execution time (milissegundos)
-      durationSeconds = Math.floor(executionTimeMs / 1000);
-      console.log('⏱️ Fallback: usando execution time:', {
-        rawValue: executionTimeMs,
-        durationSeconds,
-      });
-    }
-
-    const creditsUsed = Math.max(1, durationSeconds + 1); // Mínimo 1 crédito
-
-    console.log('💰 Cálculo final de créditos:', {
-      durationSeconds,
-      creditsUsed,
-      formula: `${durationSeconds} segundos + 1 = ${creditsUsed} créditos`,
+    // CRÉDITOS JÁ FORAM DESCONTADOS NO INÍCIO
+    // Usar o valor já registrado, SEM recalcular
+    console.log('✅ Mantendo créditos já cobrados no início:', {
+      creditos_ja_cobrados: existing.creditos_utilizados,
+      nota: 'NÃO recalcular - manter valor original',
     });
 
     const updateResult = await supabase
@@ -275,7 +243,7 @@ export async function POST(request: Request) {
         remote_video_url: ourVideoUrl || videoUrl,
         local_video_path: localPath,
         cloudinary_public_id: null,
-        creditos_utilizados: creditsUsed,
+        // Manter creditos_utilizados original, NÃO atualizar
         failure_reason: null,
         updated_at: new Date().toISOString(),
       })
@@ -290,13 +258,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // CRÉDITOS JÁ FORAM DESCONTADOS NO INÍCIO - NÃO COBRAR NOVAMENTE
-    console.log('✅ Créditos já cobrados no início:', {
-      creditos_ja_cobrados: existing.creditos_utilizados,
-      duracao_real: durationSeconds,
-      creditos_que_seriam_cobrados: creditsUsed,
-    });
-
     const { data: updatedRecord } = await supabase
       .from('videos')
       .select('*')
@@ -308,8 +269,7 @@ export async function POST(request: Request) {
       status: 'completed',
       videoUrl: localPath || ourVideoUrl || videoUrl,
       remoteVideoUrl: ourVideoUrl || videoUrl,
-      durationSeconds,
-      creditsUsed,
+      creditsUsed: existing.creditos_utilizados, // Retornar valor original
       record: updatedRecord ?? null,
     });
   } catch (error) {

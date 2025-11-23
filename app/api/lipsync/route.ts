@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase-server';
+import { blockIfAccountBlocked } from '@/lib/account-status';
 
 const LIPSYNC_API_URL = 'https://api.newportai.com/api/async/lipsync';
 
@@ -38,6 +39,12 @@ export async function POST(request: Request) {
 
     if (!user?.email) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    }
+
+    // Verificar se conta está bloqueada
+    const blockedResponse = await blockIfAccountBlocked(user.email);
+    if (blockedResponse) {
+      return blockedResponse;
     }
 
     // Verificar créditos do usuário ANTES de processar
@@ -85,8 +92,9 @@ export async function POST(request: Request) {
     }
 
     // Calcular créditos necessários baseado na duração estimada do áudio
+    // Fórmula: duração em segundos (arredondado para cima) + 1 crédito
     const duration = estimatedDuration || 0;
-    const creditsNeeded = Math.max(1, duration + 1);
+    const creditsNeeded = Math.ceil(duration) + 1;
 
     // Verificar se tem créditos suficientes para esta requisição específica
     if (totalCredits < creditsNeeded) {

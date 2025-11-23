@@ -49,10 +49,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Deletar registro do banco
+    // 🔥 SOFT DELETE: Marcar como deletado ao invés de remover
+    // Isso garante que o limite diário (3 vídeos/dia no plano FREE) funcione corretamente
+    // mesmo se o usuário deletar vídeos
     const { error: deleteError } = await supabase
       .from('videos')
-      .delete()
+      .update({ deleted_at: new Date().toISOString() })
       .eq('id', videoId)
       .eq('user_email', user.email);
 

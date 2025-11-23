@@ -68,6 +68,7 @@ export default async function AvatarVideoPage() {
     .from('videos')
     .select('id, task_id, status, local_video_path, remote_video_url, creditos_utilizados, created_at, source_video_url')
     .eq('user_email', user.email)
+    .is('deleted_at', null) // 🔥 Filtrar vídeos deletados (soft delete)
     .order('created_at', { ascending: false })
     .limit(18);
 

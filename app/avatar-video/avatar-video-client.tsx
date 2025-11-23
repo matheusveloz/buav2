@@ -11,7 +11,6 @@ import {
 } from 'react';
 import type { ReactNode, VideoHTMLAttributes } from 'react';
 import { createPortal } from 'react-dom';
-import Link from 'next/link';
 import Plyr from 'plyr-react';
 import 'plyr-react/plyr.css';
 import Swal from 'sweetalert2';
@@ -171,6 +170,115 @@ const createClientId = () =>
   typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
     ? crypto.randomUUID()
     : Math.random().toString(36).slice(2, 11);
+
+// Componente memoizado para o modal de vídeo
+const VideoModal = memo(function VideoModal({
+  item,
+  videoDimensions,
+  onClose,
+}: {
+  item: HistoryItem;
+  videoDimensions: { width: number; height: number } | null;
+  onClose: () => void;
+}) {
+  const videoUrl = item.localVideoPath || item.remoteVideoUrl || '';
+  
+  // Fechar ao pressionar ESC
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [onClose]);
+  
+  return (
+    <div 
+      data-modal-container
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-2 sm:p-4 bg-black/90 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div 
+        className="relative z-10 flex items-center justify-center w-full max-h-full"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div 
+          className="relative overflow-hidden rounded-xl sm:rounded-2xl bg-black shadow-2xl w-full"
+          style={{
+            maxWidth: videoDimensions 
+              ? videoDimensions.width > videoDimensions.height 
+                ? 'min(90vw, 1200px)'        // Horizontal: max 1200px ou 90vw
+                : 'min(95vw, 500px)'         // Vertical: max 500px ou 95vw
+              : 'min(90vw, 1200px)',         // Padrão enquanto carrega
+            maxHeight: videoDimensions && videoDimensions.height > videoDimensions.width
+              ? 'min(90vh, 800px)'           // Vertical: limitar altura
+              : undefined,
+            aspectRatio: videoDimensions 
+              ? `${videoDimensions.width}/${videoDimensions.height}`
+              : undefined,
+          }}
+        >
+          {/* Header do modal */}
+          <div className="absolute left-0 right-0 top-0 z-20 flex items-center justify-between bg-gradient-to-b from-black/80 to-transparent p-2 sm:p-4">
+            <h3 className="text-xs sm:text-base lg:text-lg font-semibold text-white truncate mr-2 sm:mr-4">
+              {item.avatarLabel}
+            </h3>
+            <div className="flex items-center gap-1 sm:gap-2 lg:gap-3">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.location.href = `/api/video/download?id=${item.id}`;
+                }}
+                className="inline-flex items-center gap-1 sm:gap-2 rounded-full bg-emerald-500/90 px-2 py-1.5 sm:px-3 sm:py-2 lg:px-4 text-xs sm:text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
+                aria-label="Baixar vídeo"
+              >
+                <svg className="h-3 w-3 sm:h-4 sm:w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                <span className="hidden sm:inline">Baixar</span>
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="inline-flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition hover:bg-white/20"
+                aria-label="Fechar"
+              >
+                <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Player de vídeo - usa dimensões naturais do vídeo */}
+          <div className="relative w-full h-full">
+            <Plyr
+              source={{
+                type: 'video',
+                sources: [
+                  {
+                    src: videoUrl,
+                    type: 'video/mp4',
+                  },
+                ],
+              }}
+              options={{
+                controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'fullscreen'],
+                hideControls: false,
+                clickToPlay: true,
+                // Não forçar ratio - deixar o vídeo usar sua proporção natural
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});
 
 // Componente memoizado para thumbnail de vídeo no histórico
 const VideoHistoryCard = memo(function VideoHistoryCard({ 
@@ -428,11 +536,11 @@ export default function AvatarVideoClient({
     };
   }, []);
   
-  // Carregar avatares selecionados do localStorage
+  // Carregar avatares selecionados do localStorage (por usuário)
   const [selectedEntries, setSelectedEntries] = useState<AvatarEntry[]>(() => {
     if (typeof window === 'undefined') return [];
     try {
-      const saved = localStorage.getItem('selectedAvatarEntries');
+      const saved = localStorage.getItem(`selectedAvatarEntries_${userId}`);
       if (saved) {
         return JSON.parse(saved);
       }
@@ -452,6 +560,7 @@ export default function AvatarVideoClient({
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
   const [avatarModalSelection, setAvatarModalSelection] = useState<Set<string>>(new Set());
   const [avatarModalTab, setAvatarModalTab] = useState<'builtin' | 'user'>('builtin');
+  const [avatarModalMode, setAvatarModalMode] = useState<{ mode: 'add' | 'replace'; entryId?: string }>({ mode: 'add' });
 
   const [isAudioModalOpen, setIsAudioModalOpen] = useState(false);
   const [pendingAudioEntryId, setPendingAudioEntryId] = useState<string | null>(null);
@@ -468,11 +577,68 @@ export default function AvatarVideoClient({
   const [recentlyCompleted, setRecentlyCompleted] = useState<Set<string>>(new Set());
   const [isMounted, setIsMounted] = useState(false);
   const [videoModalItem, setVideoModalItem] = useState<HistoryItem | null>(null);
+  const [videoDimensions, setVideoDimensions] = useState<{ width: number; height: number } | null>(null);
 
   // Garantir que está no cliente antes de usar Portal
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  // Resetar uploadedAvatars quando as props mudarem (troca de usuário)
+  useEffect(() => {
+    setUploadedAvatars(userAvatars);
+  }, [userAvatars]);
+
+  // Resetar audioLibrary quando as props mudarem (troca de usuário)
+  useEffect(() => {
+    setAudioLibrary(userAudios);
+  }, [userAudios]);
+
+  // Resetar history quando as props mudarem (troca de usuário)
+  useEffect(() => {
+    setHistory(initialHistory);
+  }, [initialHistory]);
+
+  // Resetar selectedEntries quando o userId mudar (troca de usuário)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const saved = localStorage.getItem(`selectedAvatarEntries_${userId}`);
+      if (saved) {
+        setSelectedEntries(JSON.parse(saved));
+      } else {
+        setSelectedEntries([]);
+      }
+    } catch (error) {
+      console.warn('Erro ao carregar avatares salvos do novo usuário:', error);
+      setSelectedEntries([]);
+    }
+  }, [userId]);
+
+  // Calcular dimensões do vídeo quando o modal abrir
+  useEffect(() => {
+    if (!videoModalItem) {
+      setVideoDimensions(null);
+      return;
+    }
+
+    const videoUrl = videoModalItem.localVideoPath || videoModalItem.remoteVideoUrl;
+    if (!videoUrl) return;
+
+    const video = document.createElement('video');
+    video.src = videoUrl;
+    
+    video.addEventListener('loadedmetadata', () => {
+      setVideoDimensions({
+        width: video.videoWidth,
+        height: video.videoHeight,
+      });
+    });
+
+    return () => {
+      video.src = '';
+    };
+  }, [videoModalItem]);
 
   const avatarUploadInputRef = useRef<HTMLInputElement>(null);
   const audioUploadInputRef = useRef<HTMLInputElement>(null);
@@ -510,19 +676,89 @@ export default function AvatarVideoClient({
     }
   }, [selectedEntries, activeEntryId]);
 
-  // Salvar avatares selecionados no localStorage sempre que mudar
+  // Salvar avatares selecionados no localStorage sempre que mudar (por usuário)
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
       if (selectedEntries.length > 0) {
-        localStorage.setItem('selectedAvatarEntries', JSON.stringify(selectedEntries));
+        localStorage.setItem(`selectedAvatarEntries_${userId}`, JSON.stringify(selectedEntries));
       } else {
-        localStorage.removeItem('selectedAvatarEntries');
+        localStorage.removeItem(`selectedAvatarEntries_${userId}`);
       }
     } catch (error) {
       console.warn('Erro ao salvar avatares selecionados:', error);
     }
-  }, [selectedEntries]);
+  }, [selectedEntries, userId]);
+
+  // Gerenciar overflow do body quando modais abrem/fecham (previne scroll e piscar)
+  useEffect(() => {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return;
+    
+    const shouldLockScroll = isAvatarModalOpen || isAudioModalOpen || videoModalItem !== null;
+    
+    if (shouldLockScroll) {
+      // Salvar o scroll atual e largura do scrollbar
+      const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+      const scrollY = window.scrollY;
+      
+      // Adicionar classe para prevenir layout shift
+      document.body.classList.add('modal-open');
+      
+      // Prevenir scroll e compensar a largura do scrollbar
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.left = '0';
+      document.body.style.right = '0';
+      document.body.style.width = '100%';
+      
+      // Compensar scrollbar APENAS em elementos fixed FORA do modal
+      if (scrollbarWidth > 0) {
+        document.body.style.paddingRight = `${scrollbarWidth}px`;
+        
+        // Aplicar apenas a elementos fixed específicos (header, aside)
+        // EXCLUI elementos dentro de modais
+        requestAnimationFrame(() => {
+          // Seletor mais específico: apenas elementos fixed diretos do body
+          const fixedElements = document.querySelectorAll('body > aside, body > header, body > nav');
+          fixedElements.forEach((el) => {
+            if (el instanceof HTMLElement) {
+              const computedStyle = window.getComputedStyle(el);
+              if (computedStyle.position === 'fixed') {
+                el.style.paddingRight = `${scrollbarWidth}px`;
+                el.setAttribute('data-modal-padding', 'true');
+              }
+            }
+          });
+        });
+      }
+      
+      return () => {
+        // Restaurar o estado original
+        document.body.classList.remove('modal-open');
+        document.body.style.overflow = '';
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.left = '';
+        document.body.style.right = '';
+        document.body.style.width = '';
+        document.body.style.paddingRight = '';
+        
+        // Restaurar padding apenas dos elementos que foram modificados
+        requestAnimationFrame(() => {
+          const elementsWithPadding = document.querySelectorAll('[data-modal-padding]');
+          elementsWithPadding.forEach((el) => {
+            if (el instanceof HTMLElement) {
+              el.style.paddingRight = '';
+              el.removeAttribute('data-modal-padding');
+            }
+          });
+        });
+        
+        window.scrollTo(0, scrollY);
+      };
+    }
+  }, [isAvatarModalOpen, isAudioModalOpen, videoModalItem]);
 
   // Verificar vídeos em processamento ao carregar a página
   useEffect(() => {
@@ -592,11 +828,12 @@ export default function AvatarVideoClient({
                 });
               }, 60000);
 
-              if (payload.creditsUsed && typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('creditsDeducted', { 
-                  detail: { amount: payload.creditsUsed } 
-                }));
-              }
+              // NÃO descontar créditos aqui - já foram descontados no início
+              // if (payload.creditsUsed && typeof window !== 'undefined') {
+              //   window.dispatchEvent(new CustomEvent('creditsDeducted', { 
+              //     detail: { amount: payload.creditsUsed } 
+              //   }));
+              // }
               
               
               return;
@@ -658,8 +895,20 @@ export default function AvatarVideoClient({
   );
 
   const openAvatarModal = useCallback(() => {
-    const selection = new Set(selectedEntries.map((entry) => entry.avatar.id));
-    setAvatarModalSelection(selection);
+    // No modo 'replace', selecionar apenas o avatar atual da entrada
+    if (avatarModalMode.mode === 'replace' && avatarModalMode.entryId) {
+      const currentEntry = selectedEntries.find((e) => e.id === avatarModalMode.entryId);
+      if (currentEntry) {
+        setAvatarModalSelection(new Set([currentEntry.avatar.id]));
+      } else {
+        setAvatarModalSelection(new Set());
+      }
+    } else {
+      // No modo 'add', manter avatares já selecionados marcados
+      const selection = new Set(selectedEntries.map((entry) => entry.avatar.id));
+      setAvatarModalSelection(selection);
+    }
+    
     setIsAvatarModalOpen(true);
     setErrorMessage(null);
     setAvatarModalError(null);
@@ -668,11 +917,24 @@ export default function AvatarVideoClient({
     if (typeof window !== 'undefined' && window.dispatchEvent) {
       window.dispatchEvent(new Event('modalOpened'));
     }
-  }, [selectedEntries]);
+  }, [selectedEntries, avatarModalMode.mode, avatarModalMode.entryId]);
 
   const toggleAvatarSelection = useCallback((avatarId: string) => {
     setAvatarModalSelection((prev) => {
       const next = new Set(prev);
+      
+      // Modo 'replace': Apenas 1 avatar por vez (tipo radio button)
+      if (avatarModalMode.mode === 'replace') {
+        if (next.has(avatarId)) {
+          next.delete(avatarId); // Desmarcar se clicar no mesmo
+        } else {
+          next.clear(); // Limpar todos
+          next.add(avatarId); // Adicionar apenas o novo
+        }
+        return next;
+      }
+      
+      // Modo 'add': Múltiplos avatares (comportamento original)
       if (next.has(avatarId)) {
         next.delete(avatarId);
       } else {
@@ -680,10 +942,40 @@ export default function AvatarVideoClient({
       }
       return next;
     });
-  }, []);
+  }, [avatarModalMode.mode]);
 
   const confirmAvatarSelection = useCallback(() => {
     const selectedIds = Array.from(avatarModalSelection);
+    
+    // Modo de trocar avatar
+    if (avatarModalMode.mode === 'replace' && avatarModalMode.entryId) {
+      if (selectedIds.length !== 1) {
+        setAvatarModalError('Por favor, selecione apenas 1 avatar para trocar.');
+        return;
+      }
+      
+      const newAvatarId = selectedIds[0];
+      const newAvatar = getAvatarById(newAvatarId);
+      
+      if (!newAvatar) {
+        setAvatarModalError('Avatar não encontrado.');
+        return;
+      }
+      
+      setSelectedEntries((prev) => 
+        prev.map((entry) => 
+          entry.id === avatarModalMode.entryId
+            ? { ...entry, avatar: newAvatar }
+            : entry
+        )
+      );
+      
+      setIsAvatarModalOpen(false);
+      setAvatarModalMode({ mode: 'add' });
+      return;
+    }
+    
+    // Modo de adicionar avatares (comportamento original)
     setSelectedEntries((prev) => {
       const existingMap = new Map(prev.map((entry) => [entry.avatar.id, entry]));
       const nextEntries: AvatarEntry[] = [];
@@ -707,7 +999,8 @@ export default function AvatarVideoClient({
       return nextEntries;
     });
     setIsAvatarModalOpen(false);
-  }, [avatarModalSelection, getAvatarById]);
+    setAvatarModalMode({ mode: 'add' });
+  }, [avatarModalSelection, avatarModalMode, getAvatarById]);
 
   const removeEntry = useCallback((entryId: string) => {
     setSelectedEntries((prev) => prev.filter((entry) => entry.id !== entryId));
@@ -846,6 +1139,12 @@ export default function AvatarVideoClient({
         setUploadedAvatars((prev) => [avatar, ...prev]);
         setAvatarModalSelection((prev) => {
           const next = new Set(prev);
+          
+          // Se estiver no modo 'replace', limpar seleção antes de adicionar
+          if (avatarModalMode.mode === 'replace') {
+            next.clear();
+          }
+          
           next.add(avatar.id);
           return next;
         });
@@ -861,6 +1160,7 @@ export default function AvatarVideoClient({
     },
     [
       avatarBucket,
+      avatarModalMode.mode,
       finishAvatarUploadProgress,
       initialProfile.plan,
       startAvatarUploadProgress,
@@ -1203,12 +1503,17 @@ export default function AvatarVideoClient({
           if (payload.status === 'processing' || payload.status === 'unknown') {
             setStatusMessage(`Gerando "${avatarLabel}"...`);
             
-            // Atualizar histórico com status processing
-            setHistory((prev) =>
-              prev.map((item) =>
+            // Apenas atualizar histórico se o status mudou para evitar re-renders desnecessários
+            setHistory((prev) => {
+              const currentItem = prev.find((item) => item.taskId === taskId);
+              // Se já está com status 'processing', não atualizar
+              if (currentItem && currentItem.status === 'processing') {
+                return prev;
+              }
+              return prev.map((item) =>
                 item.taskId === taskId ? { ...item, status: 'processing' } : item
-              )
-            );
+              );
+            });
             continue;
           }
 
@@ -1255,12 +1560,12 @@ export default function AvatarVideoClient({
           updateEntry(entryId, (entry) => ({ ...entry, status: 'completed' }));
           setStatusMessage(`Avatar "${avatarLabel}" gerado com sucesso!`);
           
-          // Emitir evento customizado para atualizar créditos em tempo real
-          if (payload.creditsUsed && typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('creditsDeducted', { 
-              detail: { amount: payload.creditsUsed } 
-            }));
-          }
+          // NÃO descontar créditos aqui - já foram descontados no início
+          // if (payload.creditsUsed && typeof window !== 'undefined') {
+          //   window.dispatchEvent(new CustomEvent('creditsDeducted', { 
+          //     detail: { amount: payload.creditsUsed } 
+          //   }));
+          // }
           
           return;
         }
@@ -1299,6 +1604,137 @@ export default function AvatarVideoClient({
     // Verificar limites do plano
     const planLimits = getPlanLimits(initialProfile.plan);
     
+    // 🔒 LIMITAÇÃO PLANO FREE: Verificar vídeos em processamento
+    if (initialProfile.plan === 'free') {
+      const videosEmProcessamento = history.filter(
+        (item) => item.status === 'processing' || item.status === 'pending'
+      ).length;
+      
+      if (videosEmProcessamento > 0) {
+        await Swal.fire({
+          title: 'Aguarde o vídeo atual',
+          html: `
+            <div style="text-align: left;">
+              <p>Você está no <strong>plano FREE</strong> e pode processar apenas <strong>1 vídeo por vez</strong>.</p>
+              <br>
+              <p>Você tem <strong>${videosEmProcessamento} vídeo${videosEmProcessamento > 1 ? 's' : ''}</strong> em processamento.</p>
+              <br>
+              <p>⏳ Aguarde a conclusão do processamento atual ou faça upgrade para processar múltiplos vídeos simultaneamente.</p>
+            </div>
+          `,
+          icon: 'info',
+          confirmButtonText: 'Entendi',
+          confirmButtonColor: '#3b82f6',
+          showCancelButton: true,
+          cancelButtonText: 'Ver Planos',
+          cancelButtonColor: '#10b981',
+        }).then((result) => {
+          if (result.dismiss === Swal.DismissReason.cancel) {
+            // Redirecionar para página de upgrade
+            window.location.href = '/upgrade';
+          }
+        });
+        return;
+      }
+      
+      // 🔒 LIMITAÇÃO PLANO FREE: Verificar limite de 3 vídeos por dia
+      // 🔥 IMPORTANTE: Conta TODOS os vídeos criados hoje (incluindo deletados)
+      const limiteVideosFreePorDia = 3;
+      
+      // Fazer requisição ao endpoint para contar vídeos do dia (incluindo deletados)
+      const countResponse = await fetch('/api/video/count-today');
+      
+      if (!countResponse.ok) {
+        console.error('Erro ao verificar contagem de vídeos do dia');
+        // Fallback: usar histórico local (não é ideal, mas é melhor que nada)
+        const agora = new Date();
+        const inicioDoDia = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+        
+        const videosHoje = history.filter((item) => {
+          const dataVideo = new Date(item.createdAt);
+          return dataVideo >= inicioDoDia && (item.status === 'completed' || item.status === 'processing' || item.status === 'pending');
+        }).length;
+        
+        if (videosHoje >= limiteVideosFreePorDia) {
+          const proximaResetTime = new Date(inicioDoDia);
+          proximaResetTime.setDate(proximaResetTime.getDate() + 1);
+          
+          const horasRestantes = Math.floor((proximaResetTime.getTime() - agora.getTime()) / (1000 * 60 * 60));
+          const minutosRestantes = Math.floor(((proximaResetTime.getTime() - agora.getTime()) % (1000 * 60 * 60)) / (1000 * 60));
+          
+          await Swal.fire({
+            title: 'Limite diário atingido',
+            html: `
+              <div style="text-align: left;">
+                <p>Você está no <strong>plano FREE</strong> e pode gerar até <strong>${limiteVideosFreePorDia} vídeos por dia</strong>.</p>
+                <br>
+                <p>📊 Vídeos gerados hoje: <strong>${videosHoje}/${limiteVideosFreePorDia}</strong></p>
+                <br>
+                <p>⚠️ <strong>Deletar vídeos não aumenta o limite diário.</strong></p>
+                <br>
+                <p>⏰ Seu limite será renovado em: <strong>${horasRestantes}h ${minutosRestantes}min</strong></p>
+                <br>
+                <p>💎 <strong>Faça upgrade</strong> para gerar vídeos ilimitados!</p>
+              </div>
+            `,
+            icon: 'warning',
+            confirmButtonText: 'Ver Planos',
+            confirmButtonColor: '#10b981',
+            showCancelButton: true,
+            cancelButtonText: 'Entendi',
+            cancelButtonColor: '#6b7280',
+          }).then((result) => {
+            if (result.isConfirmed) {
+              // Redirecionar para página de upgrade
+              window.location.href = '/upgrade';
+            }
+          });
+          return;
+        }
+      } else {
+        const { count } = await countResponse.json();
+        
+        if (count >= limiteVideosFreePorDia) {
+          const agora = new Date();
+          const inicioDoDia = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+          const proximaResetTime = new Date(inicioDoDia);
+          proximaResetTime.setDate(proximaResetTime.getDate() + 1);
+          
+          const horasRestantes = Math.floor((proximaResetTime.getTime() - agora.getTime()) / (1000 * 60 * 60));
+          const minutosRestantes = Math.floor(((proximaResetTime.getTime() - agora.getTime()) % (1000 * 60 * 60)) / (1000 * 60));
+          
+          await Swal.fire({
+            title: 'Limite diário atingido',
+            html: `
+              <div style="text-align: left;">
+                <p>Você está no <strong>plano FREE</strong> e pode gerar até <strong>${limiteVideosFreePorDia} vídeos por dia</strong>.</p>
+                <br>
+                <p>📊 Vídeos gerados hoje: <strong>${count}/${limiteVideosFreePorDia}</strong></p>
+                <br>
+                <p>⚠️ <strong>Deletar vídeos não aumenta o limite diário.</strong></p>
+                <br>
+                <p>⏰ Seu limite será renovado em: <strong>${horasRestantes}h ${minutosRestantes}min</strong></p>
+                <br>
+                <p>💎 <strong>Faça upgrade</strong> para gerar vídeos ilimitados!</p>
+              </div>
+            `,
+            icon: 'warning',
+            confirmButtonText: 'Ver Planos',
+            confirmButtonColor: '#10b981',
+            showCancelButton: true,
+            cancelButtonText: 'Entendi',
+            cancelButtonColor: '#6b7280',
+          }).then((result) => {
+            if (result.isConfirmed) {
+              // Redirecionar para página de upgrade
+              window.location.href = '/upgrade';
+            }
+          });
+          return;
+        }
+      }
+    }
+    
     // Validar quantidade de processamentos
     if (entriesToProcess.length > planLimits.maxProcessamentos) {
       await Swal.fire({
@@ -1332,11 +1768,11 @@ export default function AvatarVideoClient({
     }
 
     // VALIDAÇÃO CRÍTICA: Verificar se o usuário tem créditos suficientes
-    // Calcular total de créditos necessários (duração + 1 por vídeo)
+    // Calcular total de créditos necessários (duração arredondada + 1 por vídeo)
     let totalCreditsNeeded = 0;
     const creditosDetalhados = entriesToProcess.map((entry) => {
       const duration = entry.audio?.duration || 0;
-      const credits = Math.max(1, duration + 1); // Mínimo 1 crédito, senão duração + 1
+      const credits = Math.ceil(duration) + 1; // duração + 1 crédito
       totalCreditsNeeded += credits;
       return {
         avatar: entry.avatar.label,
@@ -1482,15 +1918,7 @@ export default function AvatarVideoClient({
 
     setIsGenerating(false);
     setStatusMessage('Vídeos em processamento. Acompanhe no histórico abaixo.');
-  }, [pollTaskUntilComplete, selectedEntries, toAbsoluteUrl, updateEntry, initialProfile.plan, initialProfile.credits, initialProfile.extraCredits]);
-
-  const formatDateTime = useCallback((value: string) => {
-    const date = new Date(value);
-    return new Intl.DateTimeFormat('pt-BR', {
-      dateStyle: 'short',
-      timeStyle: 'short',
-    }).format(date);
-  }, []);
+  }, [pollTaskUntilComplete, selectedEntries, toAbsoluteUrl, updateEntry, initialProfile.plan, initialProfile.credits, initialProfile.extraCredits, history]);
 
   const truncateText = useCallback((value: string, maxLength = 36) => {
     if (!value) return value;
@@ -1502,12 +1930,6 @@ export default function AvatarVideoClient({
     const endIndex = startIndex + itemsPerPage;
     return history.slice(startIndex, endIndex);
   }, [history, currentPage, itemsPerPage]);
-
-  const plyrOptions = useMemo(() => ({
-    controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'fullscreen'],
-    hideControls: true,
-    clickToPlay: true,
-  }), []);
 
   const totalPages = Math.ceil(history.length / itemsPerPage);
 
@@ -1742,9 +2164,9 @@ export default function AvatarVideoClient({
                   <VideoThumbnail
                     src={avatar.videoUrl}
                     muted
-                    loop
-                    autoPlay
                     playsInline
+                    preload="metadata"
+                    showBlurBackground={false}
                     containerClassName="relative aspect-square w-full bg-gray-900"
                     videoClassName="object-contain"
                   >
@@ -1789,38 +2211,84 @@ export default function AvatarVideoClient({
             background-position: 220% 0;
           }
         }
+
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+
+        @keyframes modalSlideUp {
+          from {
+            opacity: 0;
+            transform: translateY(20px) scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        /* CRÍTICO: Prevenir layout shift durante modal */
+        body.modal-open {
+          overflow: hidden !important;
+        }
+        
+        /* Isolar modais completamente */
+        [data-modal-container] {
+          isolation: isolate;
+          contain: layout style paint;
+          position: fixed;
+          inset: 0;
+          z-index: 99999;
+        }
+        
+        /* DESABILITAR interações APENAS no conteúdo principal (excluir sidebar) */
+        body.modal-open > main,
+        body.modal-open > main * {
+          pointer-events: none !important;
+          transition: none !important;
+          animation: none !important;
+        }
+        
+        /* Desabilitar hover states APENAS no conteúdo principal */
+        body.modal-open > main *:hover,
+        body.modal-open > main *:focus,
+        body.modal-open > main *:active {
+          outline: none !important;
+          box-shadow: none !important;
+          border-color: inherit !important;
+          background-color: inherit !important;
+        }
+        
+        /* Remover pseudo-elementos do conteúdo principal */
+        body.modal-open > main *:before,
+        body.modal-open > main *:after {
+          display: none !important;
+        }
+        
+        /* Garantir que o modal e suas children funcionem normalmente */
+        [data-modal-container],
+        [data-modal-container] * {
+          pointer-events: auto !important;
+          transition: all 0.2s ease !important;
+        }
       `}</style>
-      <div className="space-y-6 px-4 sm:px-6 lg:space-y-8 lg:px-8">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex items-start gap-3 sm:gap-4">
-            <Link
-              href="/home"
-              aria-label="Voltar para a home"
-              className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-green-400 via-emerald-500 to-green-600 text-white shadow-lg transition hover:scale-110 hover:shadow-xl sm:h-12 sm:w-12"
-            >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+      <div className="space-y-6 lg:space-y-8">
+        {/* Error/Success Messages */}
+        {errorMessage ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="inline-flex items-center gap-2 rounded-full bg-red-50 px-4 py-2 text-sm font-medium text-red-600">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856C19.403 19 20 18.403 20 17.657V6.343C20 5.597 19.403 5 18.657 5H5.343C4.597 5 4 5.597 4 6.343v11.314C4 18.403 4.597 19 5.343 19z" />
               </svg>
-            </Link>
-            <div className="space-y-1">
-              <p className="text-xs font-medium uppercase tracking-widest text-green-500 sm:text-sm">Avatar Vídeo</p>
-              <h1 className="text-xl font-semibold text-gray-900 sm:text-2xl lg:text-3xl">Criação de avatar em vídeo</h1>
-              <p className="max-w-2xl text-xs text-gray-600 sm:text-sm">
-                Selecione um ou mais avatares, vincule os respectivos áudios e gere vídeos com sincronização labial em poucos cliques.
-              </p>
-            </div>
+              {errorMessage}
+            </span>
           </div>
-          {errorMessage ? (
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="inline-flex items-center gap-2 rounded-full bg-red-50 px-4 py-2 text-sm font-medium text-red-600">
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856C19.403 19 20 18.403 20 17.657V6.343C20 5.597 19.403 5 18.657 5H5.343C4.597 5 4 5.597 4 6.343v11.314C4 18.403 4.597 19 5.343 19z" />
-                </svg>
-                {errorMessage}
-              </span>
-            </div>
-          ) : null}
-        </div>
+        ) : null}
 
         <input
           ref={avatarUploadInputRef}
@@ -1837,7 +2305,12 @@ export default function AvatarVideoClient({
           onChange={handleAudioFileInput}
         />
 
-        <section className="space-y-4 rounded-2xl border border-gray-200 bg-white/90 p-4 shadow-sm sm:space-y-6 sm:rounded-3xl sm:p-6 lg:p-8">
+        <section className="group relative overflow-hidden rounded-3xl border border-white/30 bg-white/20 backdrop-blur-xl p-6 shadow-2xl transition-all duration-300 hover:shadow-3xl lg:p-8">
+          {/* Decorative glass orbs */}
+          <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-gradient-to-br from-purple-400/20 to-pink-400/20 blur-3xl" />
+          <div className="absolute -left-16 -bottom-16 h-40 w-40 rounded-full bg-gradient-to-br from-purple-500/20 to-pink-500/20 blur-3xl" />
+          
+          <div className="relative z-10 space-y-4 sm:space-y-6">
           <div className="flex flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-gray-900">Avatares selecionados</h2>
@@ -1900,7 +2373,7 @@ export default function AvatarVideoClient({
                         containerClassName="relative aspect-square w-full bg-gray-900"
                         videoClassName="object-contain transition duration-500 group-hover:scale-105"
                       >
-                        {/* Botões de ação no vídeo */}
+                        {/* Botões de ação no vídeo (canto superior direito) */}
                         <div className="absolute right-2 top-2 z-20 flex flex-col items-center gap-2">
                           <button
                             type="button"
@@ -1937,6 +2410,26 @@ export default function AvatarVideoClient({
                             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                             </svg>
+                          </button>
+                        </div>
+                        
+                        {/* Botão Trocar (centro inferior) */}
+                        <div className="absolute bottom-3 left-1/2 z-20 -translate-x-1/2">
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              // Abrir modal para trocar avatar mantendo o áudio
+                              setAvatarModalMode({ mode: 'replace', entryId: entry.id });
+                              openAvatarModal();
+                            }}
+                            className="flex items-center gap-2 rounded-full bg-white/90 px-4 py-2 text-xs font-semibold text-gray-800 shadow-lg transition hover:bg-gray-100 hover:scale-105"
+                            aria-label="Trocar avatar"
+                          >
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                            </svg>
+                            <span>Trocar</span>
                           </button>
                         </div>
                       </VideoThumbnail>
@@ -1993,12 +2486,12 @@ export default function AvatarVideoClient({
                                     </span>
                                     <span 
                                       className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600 cursor-help"
-                                      title="Custo: 1 crédito por segundo"
+                                      title="Custo: duração + 1 crédito"
                                     >
                                       <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
                                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.31-8.86c-1.77-.45-2.34-.94-2.34-1.67 0-.84.79-1.43 2.1-1.43 1.38 0 1.9.66 1.94 1.64h1.71c-.05-1.34-.87-2.57-2.49-2.97V5H10.9v1.69c-1.51.32-2.72 1.3-2.72 2.81 0 1.79 1.49 2.69 3.66 3.21 1.95.46 2.34 1.15 2.34 1.87 0 .53-.39 1.39-2.1 1.39-1.6 0-2.23-.72-2.32-1.64H8.04c.1 1.7 1.36 2.66 2.86 2.97V19h2.34v-1.67c1.52-.29 2.72-1.16 2.73-2.77-.01-2.2-1.9-2.96-3.66-3.42z"/>
                                       </svg>
-                                      {Math.max(1, entry.audio.duration + 1)}
+                                      {Math.ceil(entry.audio.duration) + 1}
                                     </span>
                                   </>
                                 )}
@@ -2101,14 +2594,20 @@ export default function AvatarVideoClient({
               </div>
             </>
           )}
+          </div>
         </section>
 
-        <section ref={historyRef} className="space-y-4 rounded-2xl border border-gray-200 bg-white/90 p-4 shadow-sm sm:space-y-6 sm:rounded-3xl sm:p-6 lg:p-8">
+        <section ref={historyRef} className="relative overflow-hidden rounded-3xl border border-white/30 bg-white/20 backdrop-blur-xl p-6 shadow-2xl transition-all duration-300 hover:shadow-3xl lg:p-8">
+          {/* Decorative glass orbs */}
+          <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-gradient-to-br from-blue-400/20 to-cyan-400/20 blur-3xl" />
+          <div className="absolute -left-16 -bottom-16 h-40 w-40 rounded-full bg-gradient-to-br from-blue-500/20 to-cyan-500/20 blur-3xl" />
+          
+          <div className="relative z-10 space-y-4 sm:space-y-6">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold text-gray-900">Histórico</h2>
               <p className="text-sm text-gray-500">
-                Os vídeos gerados permanecem disponíveis para download por 24 horas.
+                vídeos gerados.
               </p>
             </div>
           </div>
@@ -2177,25 +2676,42 @@ export default function AvatarVideoClient({
             ) : null}
           </>
           )}
+          </div>
         </section>
 
       </div>
 
 
       {isMounted && isAvatarModalOpen && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4">
-          <div
-            className="absolute inset-0 bg-black/50"
-            onClick={() => setIsAvatarModalOpen(false)}
-            aria-hidden="true"
-          />
-          <div className="relative z-10 mx-auto w-full max-w-6xl overflow-hidden rounded-2xl bg-white shadow-2xl sm:rounded-3xl">
+        <div 
+          data-modal-container
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm"
+          onClick={() => setIsAvatarModalOpen(false)}
+          style={{ 
+            animation: 'fadeIn 0.15s ease-out'
+          }}
+        >
+          <div 
+            className="relative z-10 mx-auto w-full max-w-6xl overflow-hidden rounded-2xl bg-white shadow-2xl sm:rounded-3xl"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              animation: 'modalSlideUp 0.2s ease-out',
+              willChange: 'transform, opacity',
+              backfaceVisibility: 'hidden',
+              WebkitBackfaceVisibility: 'hidden'
+            }}
+          >
             <div className="border-b border-gray-100 px-4 py-3 sm:px-6 sm:py-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <h3 className="text-base font-semibold text-gray-900 sm:text-lg">Selecionar avatares</h3>
+                  <h3 className="text-base font-semibold text-gray-900 sm:text-lg">
+                    {avatarModalMode.mode === 'replace' ? 'Trocar avatar' : 'Selecionar avatares'}
+                  </h3>
                   <p className="text-xs text-gray-500 sm:text-sm">
-                    Escolha os avatares que deseja incluir na geração.
+                    {avatarModalMode.mode === 'replace' 
+                      ? 'Escolha um novo avatar para substituir o atual (o áudio será mantido).'
+                      : 'Escolha os avatares que deseja incluir na geração.'
+                    }
                   </p>
                 </div>
                 <button
@@ -2203,6 +2719,7 @@ export default function AvatarVideoClient({
                   onClick={() => {
                     setIsAvatarModalOpen(false);
                     setAvatarModalError(null);
+                    setAvatarModalMode({ mode: 'add' });
                   }}
                   className="flex-shrink-0 inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:border-gray-300 hover:text-gray-900 sm:px-4 sm:py-2"
                 >
@@ -2227,24 +2744,30 @@ export default function AvatarVideoClient({
                 <button
                   type="button"
                   onClick={() => setAvatarModalTab('builtin')}
-                  className={`px-4 py-2.5 text-xs font-semibold transition sm:px-6 sm:py-3 sm:text-sm ${
+                  className={`relative px-4 py-2.5 text-xs font-semibold transition sm:px-6 sm:py-3 sm:text-sm ${
                     avatarModalTab === 'builtin'
-                      ? 'border-b-2 border-emerald-500 text-emerald-600'
+                      ? 'text-emerald-600'
                       : 'text-gray-500 hover:text-gray-700'
                   }`}
                 >
                   Biblioteca padrão
+                  {avatarModalTab === 'builtin' && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500" />
+                  )}
                 </button>
                 <button
                   type="button"
                   onClick={() => setAvatarModalTab('user')}
-                  className={`px-4 py-2.5 text-xs font-semibold transition sm:px-6 sm:py-3 sm:text-sm ${
+                  className={`relative px-4 py-2.5 text-xs font-semibold transition sm:px-6 sm:py-3 sm:text-sm ${
                     avatarModalTab === 'user'
-                      ? 'border-b-2 border-emerald-500 text-emerald-600'
+                      ? 'text-emerald-600'
                       : 'text-gray-500 hover:text-gray-700'
                   }`}
                 >
                   Meus avatares
+                  {avatarModalTab === 'user' && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500" />
+                  )}
                 </button>
               </div>
             </div>
@@ -2266,11 +2789,11 @@ export default function AvatarVideoClient({
                         <VideoThumbnail
                           src={avatar.videoUrl}
                           muted
-                          loop
-                          autoPlay
                           playsInline
+                          preload="metadata"
+                          showBlurBackground={false}
                           containerClassName="relative aspect-square w-full bg-gray-900"
-                          videoClassName="object-contain opacity-90 transition duration-500 group-hover:opacity-100"
+                          videoClassName="object-contain opacity-90"
                         />
 
                         {avatarModalSelection.has(avatar.id) ? (
@@ -2301,6 +2824,7 @@ export default function AvatarVideoClient({
                     onClick={() => {
                       setIsAvatarModalOpen(false);
                       setAvatarModalError(null);
+                      setAvatarModalMode({ mode: 'add' });
                     }}
                     className="inline-flex items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-gray-300 hover:text-gray-900 sm:px-5"
                   >
@@ -2310,9 +2834,9 @@ export default function AvatarVideoClient({
                     type="button"
                     onClick={confirmAvatarSelection}
                     className="inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-emerald-500 to-green-600 px-5 py-2 text-sm font-semibold text-white shadow-md transition hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60 sm:px-6 sm:py-2.5"
-                    disabled={avatarModalSelection.size === 0}
+                    disabled={avatarModalSelection.size === 0 || (avatarModalMode.mode === 'replace' && avatarModalSelection.size > 1)}
                   >
-                    Confirmar seleção
+                    {avatarModalMode.mode === 'replace' ? 'Trocar avatar' : 'Confirmar seleção'}
                   </button>
                 </div>
               </div>
@@ -2323,16 +2847,18 @@ export default function AvatarVideoClient({
       )}
 
       {isMounted && isAudioModalOpen && pendingAudioEntryId && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/50"
-            onClick={() => {
-              setIsAudioModalOpen(false);
-              setPendingAudioEntryId(null);
-            }}
-            aria-hidden="true"
-          />
-          <div className="relative z-10 mx-4 w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl sm:mx-0 sm:rounded-3xl">
+        <div 
+          data-modal-container 
+          className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          onClick={() => {
+            setIsAudioModalOpen(false);
+            setPendingAudioEntryId(null);
+          }}
+        >
+          <div 
+            className="relative z-10 mx-4 w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl sm:mx-0 sm:rounded-3xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">Biblioteca de áudio</h3>
@@ -2515,67 +3041,11 @@ export default function AvatarVideoClient({
 
       {/* Modal de reprodução de vídeo */}
       {isMounted && videoModalItem && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/80"
-            onClick={() => setVideoModalItem(null)}
-            aria-hidden="true"
-          />
-          <div className="relative z-10 flex items-center justify-center">
-            <div className="relative overflow-hidden rounded-2xl bg-black shadow-2xl">
-              {/* Header do modal */}
-              <div className="absolute left-0 right-0 top-0 z-20 flex items-center justify-between bg-gradient-to-b from-black/80 to-transparent p-4">
-                <h3 className="text-base sm:text-lg font-semibold text-white truncate mr-4">{videoModalItem.avatarLabel}</h3>
-                <div className="flex items-center gap-2 sm:gap-3">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      window.location.href = `/api/video/download?id=${videoModalItem.id}`;
-                    }}
-                    className="inline-flex items-center gap-2 rounded-full bg-emerald-500/90 px-3 py-2 text-xs sm:px-4 sm:text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
-                    aria-label="Baixar vídeo"
-                  >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                    <span className="hidden sm:inline">Baixar</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setVideoModalItem(null)}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition hover:bg-white/20"
-                    aria-label="Fechar"
-                  >
-                    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-
-              {/* Player de vídeo - tamanho controlado e compacto */}
-              <div className="relative video-modal-player">
-                <Plyr
-                  source={{
-                    type: 'video',
-                    sources: [
-                      {
-                        src: videoModalItem.localVideoPath || videoModalItem.remoteVideoUrl || '',
-                        type: 'video/mp4',
-                      },
-                    ],
-                  }}
-                  options={{
-                    controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'fullscreen'],
-                    hideControls: false,
-                    clickToPlay: true,
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>,
+        <VideoModal
+          item={videoModalItem}
+          videoDimensions={videoDimensions}
+          onClose={() => setVideoModalItem(null)}
+        />,
         document.body
       )}
     </AuthenticatedShell>

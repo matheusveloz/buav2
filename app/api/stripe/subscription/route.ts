@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     // Buscar assinatura ativa
     const { data: subscription, error: subError } = await supabaseAdmin
       .from('subscriptions')
-      .select('stripe_subscription_id, status')
+      .select('stripe_subscription_id, status, plano')
       .eq('user_email', user.email)
       .eq('status', 'ativa')
       .single();
@@ -55,11 +55,15 @@ export async function POST(request: NextRequest) {
       })
       .eq('stripe_subscription_id', subscription.stripe_subscription_id);
 
-    // Voltar usuário para free
-    await supabaseAdmin
-      .from('emails')
-      .update({ plano: 'free' })
-      .eq('email', user.email);
+    // ✅ NÃO volta para free - usuário mantém plano e créditos
+    // Ele pode usar os créditos até acabar
+    // Quando acabar, não renova porque assinatura está cancelada
+    
+    console.log('✅ Assinatura cancelada - usuário mantém plano e créditos:', {
+      email: user.email,
+      plano: subscription.plano,
+      mensagem: 'Pode usar créditos até acabar'
+    });
 
     return NextResponse.json({
       success: true,
@@ -86,7 +90,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    // Buscar assinatura do usuário
+    // Buscar assinatura do usuário (incluindo canceladas)
     const { data: subscription } = await supabaseAdmin
       .from('subscriptions')
       .select('*')
@@ -122,6 +126,69 @@ export async function GET() {
     console.error('Erro ao buscar assinatura:', error);
     return NextResponse.json(
       { error: 'Erro ao buscar assinatura' },
+      { status: 500 }
+    );
+  }
+}
+
+// PUT - Reativar assinatura cancelada
+export async function PUT(request: NextRequest) {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user?.email) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const { plan } = body;
+
+    if (!plan) {
+      return NextResponse.json({ error: 'Plano não informado' }, { status: 400 });
+    }
+
+    // Buscar assinatura cancelada
+    const { data: subscription, error: subError } = await supabaseAdmin
+      .from('subscriptions')
+      .select('stripe_subscription_id, status, plano')
+      .eq('user_email', user.email)
+      .eq('status', 'cancelada')
+      .order('data_inicio', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (subError || !subscription) {
+      return NextResponse.json({ 
+        error: 'Nenhuma assinatura cancelada encontrada. Faça uma nova assinatura.' 
+      }, { status: 404 });
+    }
+
+    // Atualizar status no banco para ativa
+    await supabaseAdmin
+      .from('subscriptions')
+      .update({
+        status: 'ativa',
+        data_cancelamento: null,
+      })
+      .eq('stripe_subscription_id', subscription.stripe_subscription_id);
+
+    // Restaurar plano do usuário
+    await supabaseAdmin
+      .from('emails')
+      .update({ plano: plan })
+      .eq('email', user.email);
+
+    return NextResponse.json({
+      success: true,
+      message: 'Assinatura reativada com sucesso',
+    });
+  } catch (error) {
+    console.error('Erro ao reativar assinatura:', error);
+    return NextResponse.json(
+      { error: 'Erro ao reativar assinatura' },
       { status: 500 }
     );
   }

@@ -9,8 +9,8 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  title: "BUUA - Plataforma de Gestão",
-  description: "A nova versão da plataforma BUUA está chegando",
+  title: "Buua - Melhores ferramentas gratuitas de IA para geração de vídeo e imagem",
+  description: "Melhores ferramentas gratuitas de IA para geração de vídeo e imagem",
   icons: {
     icon: '/ico.png',
     shortcut: '/ico.png',
@@ -25,6 +25,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR">
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+      </head>
       <body className={`${poppins.className} antialiased`}>
         {children}
       </body>

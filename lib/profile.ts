@@ -1,6 +1,6 @@
 export const DEFAULT_PROFILE = {
   plan: 'free',
-  credits: 150,
+  credits: 0, // Agora 0 por padrão - créditos iniciais serão dados apenas no primeiro login
   extraCredits: 0,
 } as const;
 

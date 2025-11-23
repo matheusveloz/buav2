@@ -649,6 +649,127 @@ export default function CreateVoiceClient({
         return;
       }
 
+      let contentType = 'general';
+
+      // Se o modo for 'improve', perguntar o tipo de conteúdo
+      if (mode === 'improve') {
+        const { value: selectedType } = await Swal.fire({
+          title: 'Qual o contexto do seu texto?',
+          html: `
+            <div style="text-align: left; margin-bottom: 20px;">
+              <p style="color: #6b7280; font-size: 14px; margin: 0;">
+                Escolha o tipo de conteúdo para otimizar o texto de acordo:
+              </p>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; max-width: 500px; margin: 0 auto;">
+              <button type="button" class="content-type-btn" data-value="video-script" style="display: flex; align-items: center; gap: 10px; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 12px; background: white; cursor: pointer; text-align: left; transition: all 0.2s; font-size: 14px;">
+                <span style="font-size: 24px;">🎬</span>
+                <div style="flex: 1;">
+                  <div style="font-weight: 600; color: #111827; margin-bottom: 2px;">Roteiro de Vídeo</div>
+                  <div style="font-size: 11px; color: #6b7280;">YouTube, Reels, TikTok</div>
+                </div>
+              </button>
+              
+              <button type="button" class="content-type-btn" data-value="ad-copy" style="display: flex; align-items: center; gap: 10px; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 12px; background: white; cursor: pointer; text-align: left; transition: all 0.2s; font-size: 14px;">
+                <span style="font-size: 24px;">📢</span>
+                <div style="flex: 1;">
+                  <div style="font-weight: 600; color: #111827; margin-bottom: 2px;">Anúncio</div>
+                  <div style="font-size: 11px; color: #6b7280;">Vendas, Marketing</div>
+                </div>
+              </button>
+              
+              <button type="button" class="content-type-btn" data-value="narration" style="display: flex; align-items: center; gap: 10px; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 12px; background: white; cursor: pointer; text-align: left; transition: all 0.2s; font-size: 14px;">
+                <span style="font-size: 24px;">🎙️</span>
+                <div style="flex: 1;">
+                  <div style="font-weight: 600; color: #111827; margin-bottom: 2px;">Narração</div>
+                  <div style="font-size: 11px; color: #6b7280;">Locução Profissional</div>
+                </div>
+              </button>
+              
+              <button type="button" class="content-type-btn" data-value="tutorial" style="display: flex; align-items: center; gap: 10px; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 12px; background: white; cursor: pointer; text-align: left; transition: all 0.2s; font-size: 14px;">
+                <span style="font-size: 24px;">📚</span>
+                <div style="flex: 1;">
+                  <div style="font-weight: 600; color: #111827; margin-bottom: 2px;">Tutorial</div>
+                  <div style="font-size: 11px; color: #6b7280;">Educativo, How-to</div>
+                </div>
+              </button>
+              
+              <button type="button" class="content-type-btn" data-value="storytelling" style="display: flex; align-items: center; gap: 10px; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 12px; background: white; cursor: pointer; text-align: left; transition: all 0.2s; font-size: 14px;">
+                <span style="font-size: 24px;">📖</span>
+                <div style="flex: 1;">
+                  <div style="font-weight: 600; color: #111827; margin-bottom: 2px;">Narrativa</div>
+                  <div style="font-size: 11px; color: #6b7280;">Contar histórias</div>
+                </div>
+              </button>
+              
+              <button type="button" class="content-type-btn" data-value="presentation" style="display: flex; align-items: center; gap: 10px; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 12px; background: white; cursor: pointer; text-align: left; transition: all 0.2s; font-size: 14px;">
+                <span style="font-size: 24px;">💼</span>
+                <div style="flex: 1;">
+                  <div style="font-weight: 600; color: #111827; margin-bottom: 2px;">Apresentação</div>
+                  <div style="font-size: 11px; color: #6b7280;">Corporativa, Pitch</div>
+                </div>
+              </button>
+              
+              <button type="button" class="content-type-btn" data-value="podcast" style="display: flex; align-items: center; gap: 10px; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 12px; background: white; cursor: pointer; text-align: left; transition: all 0.2s; font-size: 14px;">
+                <span style="font-size: 24px;">🎧</span>
+                <div style="flex: 1;">
+                  <div style="font-weight: 600; color: #111827; margin-bottom: 2px;">Podcast</div>
+                  <div style="font-size: 11px; color: #6b7280;">Áudio longo</div>
+                </div>
+              </button>
+              
+              <button type="button" class="content-type-btn" data-value="general" style="display: flex; align-items: center; gap: 10px; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 12px; background: white; cursor: pointer; text-align: left; transition: all 0.2s; font-size: 14px;">
+                <span style="font-size: 24px;">✨</span>
+                <div style="flex: 1;">
+                  <div style="font-weight: 600; color: #111827; margin-bottom: 2px;">Geral</div>
+                  <div style="font-size: 11px; color: #6b7280;">Otimização padrão</div>
+                </div>
+              </button>
+            </div>
+            <style>
+              .content-type-btn:hover {
+                border-color: #10b981 !important;
+                background: #f0fdf4 !important;
+                transform: translateY(-2px);
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+              }
+              .content-type-btn.selected {
+                border-color: #10b981 !important;
+                background: #d1fae5 !important;
+                box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+              }
+            </style>
+          `,
+          showCancelButton: true,
+          showConfirmButton: false,
+          cancelButtonText: 'Cancelar',
+          cancelButtonColor: '#6b7280',
+          width: '600px',
+          didOpen: () => {
+            const buttons = document.querySelectorAll('.content-type-btn');
+            buttons.forEach((btn) => {
+              btn.addEventListener('click', function(this: HTMLButtonElement) {
+                const value = this.getAttribute('data-value');
+                if (value) {
+                  Swal.clickConfirm();
+                  // Armazenar o valor selecionado
+                  (Swal as any).selectedContentType = value;
+                }
+              });
+            });
+          },
+        });
+
+        // Pegar o valor que foi armazenado quando clicou no botão
+        const finalType = (Swal as any).selectedContentType;
+        
+        if (!finalType) {
+          return; // Usuário cancelou
+        }
+
+        contentType = finalType;
+      }
+
       // Define o estado de loading específico para cada modo
       if (mode === 'improve') {
         setIsImprovingText(true);
@@ -665,6 +786,7 @@ export default function CreateVoiceClient({
           body: JSON.stringify({
             text: generateText,
             mode,
+            contentType,
           }),
         });
 
@@ -676,12 +798,24 @@ export default function CreateVoiceClient({
         const data = (await response.json()) as {
           improvedText: string;
           mode: string;
+          contentType?: string;
         };
 
         setGenerateText(data.improvedText);
 
+        const contentTypeLabels: Record<string, string> = {
+          'video-script': 'roteiro de vídeo',
+          'ad-copy': 'anúncio',
+          'narration': 'narração',
+          'tutorial': 'tutorial',
+          'storytelling': 'narrativa',
+          'presentation': 'apresentação',
+          'podcast': 'podcast',
+          'general': 'texto geral',
+        };
+
         const successMessages = {
-          improve: 'Texto otimizado no formato AIDA!',
+          improve: `Texto otimizado para ${contentTypeLabels[data.contentType || 'general']}!`,
           punctuation: 'Pontuação corrigida!',
           correct: 'Texto corrigido!',
         };
@@ -691,7 +825,7 @@ export default function CreateVoiceClient({
           title: 'Texto melhorado!',
           text: successMessages[mode as keyof typeof successMessages],
           confirmButtonColor: '#10b981',
-          timer: 2000,
+          timer: 2500,
           timerProgressBar: true,
         });
       } catch (error) {
@@ -1035,34 +1169,14 @@ export default function CreateVoiceClient({
 
   return (
     <AuthenticatedShell initialProfile={initialProfile} userEmail={userEmail}>
-      <div className="space-y-8 px-4 sm:px-6 lg:px-8">
-        <section className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex items-start gap-3 sm:gap-4">
-            <Link
-              href="/home"
-              aria-label="Voltar para a home"
-              className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-green-400 via-emerald-500 to-green-600 text-white shadow-lg transition hover:scale-110 hover:shadow-xl sm:h-12 sm:w-12"
-            >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-              </svg>
-            </Link>
-            <div className="space-y-1">
-              <p className="text-xs font-medium uppercase tracking-widest text-green-500 sm:text-sm">
-                Estúdio de Voz
-              </p>
-              <h1 className="text-xl font-semibold text-gray-900 sm:text-2xl lg:text-3xl">
-                Criação de voz personalizada
-              </h1>
-              <p className="max-w-2xl text-xs text-gray-600 sm:text-sm">
-                Combine vozes padrão ou cadastre as suas para gerar locuções naturais alinhadas ao seu conteúdo.
-              </p>
-            </div>
-          </div>
-        </section>
-
+      <div className="space-y-8">
         <section className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,0.8fr)]">
-          <div className="flex h-full flex-col rounded-3xl border border-gray-200 bg-white/95 p-6 shadow-sm sm:p-8">
+          <div className="group relative overflow-hidden rounded-3xl border border-white/30 bg-white/20 backdrop-blur-xl p-6 shadow-2xl transition-all duration-300 hover:shadow-3xl lg:p-8">
+            {/* Decorative glass orbs */}
+            <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-gradient-to-br from-blue-400/20 to-cyan-400/20 blur-3xl" />
+            <div className="absolute -left-16 -bottom-16 h-40 w-40 rounded-full bg-gradient-to-br from-blue-500/20 to-cyan-500/20 blur-3xl" />
+            
+            <div className="relative z-10 flex h-full flex-col">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h2 className="text-lg	font-semibold text-gray-900">Gerador de vozes</h2>
@@ -1197,23 +1311,29 @@ export default function CreateVoiceClient({
             </div>
 
             <div className="mt-6" />
+            </div>
           </div>
 
-          <div className="flex h-full flex-col rounded-3xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8">
-            <div className="flex items-center justify-between gap-4">
+          <div className="group relative overflow-hidden rounded-3xl border border-white/30 bg-white/20 backdrop-blur-xl p-6 shadow-2xl transition-all duration-300 hover:shadow-3xl lg:p-8">
+            {/* Decorative glass orbs */}
+            <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-gradient-to-br from-emerald-400/20 to-lime-400/20 blur-3xl" />
+            <div className="absolute -left-16 -bottom-16 h-40 w-40 rounded-full bg-gradient-to-br from-emerald-500/20 to-lime-500/20 blur-3xl" />
+            
+            <div className="relative z-10 flex h-full flex-col">
+            <div className="flex flex-col gap-4">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">Biblioteca de vozes</h2>
-                <p className="text-sm text-gray-500">Escolha vozes padrão ou gerencie as suas personalizadas</p>
+                <h2 className="text-base font-semibold text-gray-900 sm:text-lg">Biblioteca de vozes</h2>
+                <p className="mt-1 text-xs text-gray-500 sm:text-sm">Escolha vozes padrão ou gerencie as suas personalizadas</p>
               </div>
               <button
                 type="button"
                 onClick={handleOpenUploadModal}
-                className="inline-flex flex-shrink-0 items-center gap-2 rounded-full bg-purple-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-purple-700 hover:shadow-lg active:scale-95"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-purple-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-purple-700 hover:shadow-lg active:scale-95"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
                 </svg>
-                <span className="whitespace-nowrap">Clonar Voz</span>
+                <span>Clonar Voz</span>
               </button>
             </div>
 
@@ -1252,8 +1372,8 @@ export default function CreateVoiceClient({
                 
                 Todos os valores são enviados para a API ElevenLabs durante a geração do áudio.
               */}
-              <div className="mt-6 space-y-5 rounded-2xl border border-gray-200 bg-gray-50/80 p-5">
-                <div className="flex items-center justify-between">
+              <div className="mt-6 space-y-4 rounded-2xl border border-gray-200 bg-gray-50/80 p-4 sm:space-y-5 sm:p-5">
+                <div className="flex flex-col gap-1.5 sm:gap-2">
                   <h3 className="text-sm font-semibold text-gray-900">Configurações Avançadas</h3>
                   <span className="text-xs text-gray-500">Ajuste os parâmetros da síntese de voz</span>
                 </div>
@@ -1391,10 +1511,16 @@ export default function CreateVoiceClient({
               </div>
 
             </div>
+            </div>
           </div>
         </section>
 
-        <section className="rounded-3xl border border-gray-200 bg-white/95 p-6 shadow-sm sm:p-8">
+        <section className="group relative overflow-hidden rounded-3xl border border-white/30 bg-white/20 backdrop-blur-xl p-6 shadow-2xl transition-all duration-300 hover:shadow-3xl lg:p-8">
+          {/* Decorative glass orbs */}
+          <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-gradient-to-br from-purple-400/20 to-pink-400/20 blur-3xl" />
+          <div className="absolute -left-16 -bottom-16 h-40 w-40 rounded-full bg-gradient-to-br from-purple-500/20 to-pink-500/20 blur-3xl" />
+          
+          <div className="relative z-10">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-gray-900">Histórico de áudios</h2>
@@ -1581,6 +1707,7 @@ export default function CreateVoiceClient({
               </div>
             </div>
           )}
+          </div>
         </section>
       </div>
 

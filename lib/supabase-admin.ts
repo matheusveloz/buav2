@@ -1,25 +1,33 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 
-let adminClient: SupabaseClient | null = null;
+/**
+ * Cliente Supabase com Service Role Key
+ * Usado para operações administrativas como upload de arquivos no Storage
+ * 
+ * IMPORTANTE: Usar apenas no servidor! Nunca expor no cliente.
+ */
+export function createSupabaseAdminClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-export function getSupabaseAdminClient() {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-    throw new Error('NEXT_PUBLIC_SUPABASE_URL não configurada');
+  if (!supabaseUrl) {
+    throw new Error('NEXT_PUBLIC_SUPABASE_URL não está configurada');
   }
 
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    throw new Error('SUPABASE_SERVICE_ROLE_KEY não configurada');
+  if (!serviceRoleKey) {
+    console.error('❌ SUPABASE_SERVICE_ROLE_KEY não está configurada!');
+    console.error('📝 Isso é necessário para upload de imagens no Storage.');
+    console.error('🔧 Adicione no Vercel: Settings → Environment Variables');
+    throw new Error(
+      'SUPABASE_SERVICE_ROLE_KEY não configurada. Upload para Storage não funcionará!'
+    );
   }
 
-  if (!adminClient) {
-    adminClient = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
-      auth: {
-        persistSession: false,
-      },
-    });
-  }
-
-  return adminClient;
+  // Cliente com privilégios administrativos
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
 }
-
-
