@@ -181,7 +181,10 @@ async function processTask(task: any, supabase: any) {
             }
 
             requestBody.contents[0].parts.push({
-              inline_data: { mimeType, data }, // ✅ CORRIGIDO: inline_data (com underscore)
+              inline_data: { 
+                mime_type: mimeType, // ✅ CORRIGIDO: mime_type (com underscore)
+                data: data 
+              },
             });
           }
         }
@@ -213,6 +216,11 @@ async function processTask(task: any, supabase: any) {
           }
 
           const nanoResult = await nanoResponse.json();
+          
+          // ✅ LOGAR RESPOSTA COMPLETA para debug
+          console.log(`📦 [CRON V3] ===== RESPOSTA COMPLETA DA API =====`);
+          console.log(JSON.stringify(nanoResult, null, 2).substring(0, 2000)); // Primeiros 2000 chars
+          console.log(`📦 [CRON V3] ===== FIM RESPOSTA =====`);
           
           console.log(`📦 [CRON V3] Resposta parseada, keys:`, Object.keys(nanoResult));
           console.log(`📦 [CRON V3] Has candidates:`, !!nanoResult.candidates);
