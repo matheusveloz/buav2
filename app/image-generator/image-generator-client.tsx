@@ -306,7 +306,21 @@ export default function ImageGeneratorClient({
           ids: newImages.map((img: { id: string }) => img.id),
         });
 
-        setImages((prev) => [...newImages, ...prev]);
+        // ✅ EVITAR DUPLICAÇÃO: Verificar se imagens já existem antes de adicionar
+        setImages((prev) => {
+          // Filtrar imagens que já existem (por generationId)
+          const existingIds = new Set(prev.map(img => img.id.split('-')[0])); // Pegar só o generationId
+          const newGenerationId = data.generationId || generationId;
+          
+          // Se já existe imagem deste generationId, não adicionar
+          if (existingIds.has(newGenerationId)) {
+            console.log('⚠️ Imagens deste generationId já existem - não duplicando:', newGenerationId);
+            return prev;
+          }
+          
+          console.log('✅ Adicionando novas imagens (não duplicadas)');
+          return [...newImages, ...prev];
+        });
 
         // Atualizar contador diário para plano FREE
         if (profile.plan.toLowerCase() === 'free' && dailyImageCount) {
