@@ -45,7 +45,9 @@ interface GenerateImageRequest {
 
 export async function POST(request: NextRequest) {
   const requestId = Math.random().toString(36).substring(7);
+  const timestamp = new Date().toISOString();
   console.log(`\n🆔 [${requestId}] ===== POST /api/generate-image INICIADO =====`);
+  console.log(`🆔 [${requestId}] ⏰ Timestamp: ${timestamp}`);
   
   try {
     console.log(`🆔 [${requestId}] 📸 Iniciando geração de imagem...`);
@@ -630,7 +632,8 @@ export async function POST(request: NextRequest) {
       });
     } else {
       // Newport AI - resposta assíncrona (não espera conclusão, retorna imediatamente)
-      console.log('🚀 Retornando resposta assíncrona - cliente fará polling');
+      console.log(`🚀 [${requestId}] Retornando resposta assíncrona - cliente fará polling`);
+      console.log(`🆔 [${requestId}] ===== POST /api/generate-image FINALIZADO =====\n`);
       return NextResponse.json({
         success: true,
         taskId,
@@ -642,7 +645,8 @@ export async function POST(request: NextRequest) {
       });
     }
   } catch (error) {
-    console.error('❌ [POST /api/generate-image] Erro:', error);
+    console.error(`❌ [${requestId}] [POST /api/generate-image] Erro:`, error);
+    console.log(`🆔 [${requestId}] ===== POST /api/generate-image FINALIZADO COM ERRO =====\n`);
     return NextResponse.json(
       {
         error: 'Erro interno do servidor',

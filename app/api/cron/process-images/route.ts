@@ -114,6 +114,7 @@ export async function GET(request: NextRequest) {
         'gemini-3-pro-image-edit',
       ])
       .lt('created_at', tenSecondsAgo.toISOString())
+      .is('processing_started_at', null) // ✅ LOCK: Só pegar tasks que AINDA NÃO começaram a processar
       .order('created_at', { ascending: true })
       .limit(10); // Processar até 10 tasks por vez
 
@@ -186,6 +187,32 @@ async function processTask(task: GeneratedImageTask, supabase: ReturnType<typeof
   console.log(`🔧 [CRON] Num images: ${num}`);
   console.log(`🔧 [CRON] Prompt: ${prompt?.substring(0, 100)}...`);
   console.log(`🔧 [CRON] API Key disponível: ${!!LAOZHANG_API_KEY}`);
+
+  // ✅ LOCK ATÔMICO: Marcar que está processando ANTES de começar
+  // Isso evita que múltiplas instâncias do cron processem a mesma task
+  console.log(`🔒 [CRON] Tentando adquirir lock para ${taskId}...`);
+  
+  const { data: lockResult, error: lockError } = await supabase
+    .from('generated_images')
+    .update({ 
+      processing_started_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('task_id', taskId)
+    .is('processing_started_at', null) // Só atualiza se AINDA NÃO começou
+    .select();
+
+  if (lockError) {
+    console.error(`❌ [CRON] Erro ao adquirir lock:`, lockError);
+    return; // Não processar se não conseguiu lock
+  }
+
+  if (!lockResult || lockResult.length === 0) {
+    console.log(`⚠️ [CRON] Lock não adquirido - outra instância já está processando ${taskId}`);
+    return; // Outra instância já pegou esta task
+  }
+
+  console.log(`✅ [CRON] Lock adquirido! Processando ${taskId}...`);
 
   try {
     const startTime = Date.now();
