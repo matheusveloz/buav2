@@ -122,6 +122,33 @@ async function processTask(task: any, supabase: any) {
       // ========== PROCESSAR V3 (Gemini 3 Pro / Nano Banana 2) ==========
       console.log(`🚀 [CRON V3] Processando v3-high-quality: ${taskId}`);
 
+      // ✅ TRADUZIR PROMPT PARA INGLÊS (v3 funciona melhor com inglês)
+      // Detectar se prompt está em português
+      const portugueseKeywords = ['crie', 'coloque', 'faça', 'gere', 'post', 'instagram', 'sobre'];
+      const isPortuguese = portugueseKeywords.some(keyword => prompt.toLowerCase().includes(keyword));
+      
+      let finalPrompt = prompt;
+      
+      if (isPortuguese) {
+        console.log(`🌐 [CRON V3] Prompt em português detectado, traduzindo para inglês...`);
+        // Tradução simples (pode melhorar com API de tradução depois)
+        finalPrompt = prompt
+          .replace(/crie um post/gi, 'create a post')
+          .replace(/coloque uma/gi, 'add a')
+          .replace(/coloque um/gi, 'add a')
+          .replace(/sobre/gi, 'about')
+          .replace(/saúde e bem estar/gi, 'health and wellness')
+          .replace(/pessoa malhada/gi, 'fit person')
+          .replace(/educação física/gi, 'physical education')
+          .replace(/melancia/gi, 'watermelon')
+          .replace(/manga/gi, 'mango')
+          .replace(/título/gi, 'title')
+          .replace(/instagram/gi, 'social media');
+        
+        console.log(`🌐 [CRON V3] Prompt original: ${prompt.substring(0, 100)}`);
+        console.log(`🌐 [CRON V3] Prompt traduzido: ${finalPrompt.substring(0, 100)}`);
+      }
+
       for (let i = 0; i < num; i++) {
         console.log(`🎨 [CRON V3] Gerando imagem ${i + 1}/${num}...`);
 
@@ -129,7 +156,7 @@ async function processTask(task: any, supabase: any) {
         const requestBody: any = {
           contents: [
             {
-              parts: [{ text: prompt }],
+              parts: [{ text: finalPrompt }], // ✅ Usar prompt traduzido
             },
           ],
           generationConfig: {
