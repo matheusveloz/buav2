@@ -203,32 +203,49 @@ async function processTask(task: any, supabase: any) {
           }
 
           const nanoResult = await nanoResponse.json();
+          
+          console.log(`📦 [CRON V3] Resposta parseada, keys:`, Object.keys(nanoResult));
+          console.log(`📦 [CRON V3] Has candidates:`, !!nanoResult.candidates);
+          console.log(`📦 [CRON V3] Candidates length:`, nanoResult.candidates?.length);
 
           // Extrair imagem
           if (!nanoResult.candidates || nanoResult.candidates.length === 0) {
+            console.error(`❌ [CRON V3] Resposta sem candidates. Full response:`, JSON.stringify(nanoResult).substring(0, 500));
             throw new Error('Resposta sem candidates');
           }
 
           const candidate = nanoResult.candidates[0];
+          console.log(`📦 [CRON V3] Candidate keys:`, Object.keys(candidate));
+          console.log(`📦 [CRON V3] Content keys:`, Object.keys(candidate.content || {}));
+          console.log(`📦 [CRON V3] Parts length:`, candidate.content?.parts?.length);
+          
           let imagePart = null;
 
           // Pegar última imagem
           for (let j = candidate.content.parts.length - 1; j >= 0; j--) {
             const part = candidate.content.parts[j];
+            console.log(`📦 [CRON V3] Part ${j} keys:`, Object.keys(part));
             if (part.inlineData) {
               imagePart = part;
+              console.log(`✅ [CRON V3] InlineData encontrado no part ${j}`);
               break;
             }
           }
 
           if (!imagePart || !imagePart.inlineData || !imagePart.inlineData.data) {
+            console.error(`❌ [CRON V3] Imagem não encontrada. Parts:`, JSON.stringify(candidate.content.parts).substring(0, 500));
             throw new Error('Imagem não encontrada na resposta');
           }
+          
+          console.log(`✅ [CRON V3] Base64 data length:`, imagePart.inlineData.data.length);
+          console.log(`✅ [CRON V3] MimeType:`, imagePart.inlineData.mimeType);
 
           const base64Data = imagePart.inlineData.data;
           const mimeType = imagePart.inlineData.mimeType || 'image/png';
           const dataUrl = `data:${mimeType};base64,${base64Data}`;
 
+          console.log(`📤 [CRON V3] Fazendo upload para Storage... (user: ${userEmail}, taskId: ${taskId}, index: ${i})`);
+          
           // Upload para Storage
           const uploadedImage = await uploadBase64ToStorage(
             supabase,
@@ -238,9 +255,13 @@ async function processTask(task: any, supabase: any) {
             i
           );
 
+          console.log(`📥 [CRON V3] Upload result:`, uploadedImage ? 'SUCCESS' : 'FAILED');
+          
           if (uploadedImage) {
             generatedImages.push(uploadedImage);
-            console.log(`✅ [CRON V3] Imagem ${i + 1}/${num} gerada e salva`);
+            console.log(`✅ [CRON V3] Imagem ${i + 1}/${num} gerada e salva. URL: ${uploadedImage.imageUrl?.substring(0, 80)}`);
+          } else {
+            console.error(`❌ [CRON V3] Upload retornou null/undefined`);
           }
 
         } catch (error) {

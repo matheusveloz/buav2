@@ -404,7 +404,7 @@ export default function ImageGeneratorClient({
         });
       }
     }
-  }, [prompt, profile.plan, dailyImageCount]);
+  }, [prompt, profile.plan, dailyImageCount, selectedModel.id]);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -492,7 +492,7 @@ export default function ImageGeneratorClient({
           });
           
           // Determinar o modelo baseado nos metadados ou defaults
-          let imageModel = img.model || 'v2-quality'; // Default para v2-quality para compatibilidade
+          const imageModel = img.model || 'v2-quality'; // Default para v2-quality para compatibilidade
           
           return img.image_urls.map((urlData, urlIndex) => ({
             id: `${img.id}-${urlIndex}`,
