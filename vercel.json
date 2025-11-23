@@ -4,6 +4,10 @@
       "maxDuration": 300,
       "memory": 1024
     },
+    "app/api/cron/process-images/route.ts": {
+      "maxDuration": 300,
+      "memory": 1024
+    },
     "app/api/**/*.ts": {
       "maxDuration": 60,
       "memory": 1024
@@ -12,7 +16,7 @@
   "crons": [
     {
       "path": "/api/cron/process-images",
-      "schedule": "*/5 * * * *"
+      "schedule": "* * * * *"
     }
   ],
   "regions": ["iad1"],

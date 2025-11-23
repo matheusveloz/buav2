@@ -2,15 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase-server';
 import { rateLimiter } from '@/lib/rate-limiter';
 import {
-  buildText2ImageRequest,
-  buildImageEditRequest,
-  extractBase64Image,
   generateTaskId,
-  isValidNanoBananaResponse,
 } from '@/lib/nano-banana-helper';
-import { uploadBase64ToStorage } from '@/lib/upload-base64-to-storage';
-import { createSupabaseAdminClient } from '@/lib/supabase-admin';
-import { SupabaseClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
 // ⚠️ CRÍTICO: maxDuration DEVE ser maior que todos os timeouts de fetch!
@@ -50,200 +43,12 @@ interface GenerateImageRequest {
   useGoogleSearch?: boolean; // Para v3-high-quality (Google Search Grounding)
 }
 
-// Função auxiliar para geração v2 assíncrona (Nano Banana)
-async function generateV2ImageAsync(
-  prompt: string,
-  referenceImages: string[],
-  userEmail: string,
-  taskId: string,
-  num: number,
-  supabaseClient: SupabaseClient
-) {
-  const LAOZHANG_API_KEY = process.env.LAOZHANG_API_KEY;
-  const LAOZHANG_BASE_URL = 'https://api.laozhang.ai/v1/chat/completions';
-
-  try {
-    console.log(`🔄 [ASYNC V2] ===== INÍCIO DA FUNÇÃO =====`);
-    console.log(`🔄 [ASYNC V2] TaskId: ${taskId}`);
-    console.log(`🔄 [ASYNC V2] Num imagens: ${num}`);
-    console.log(`🔄 [ASYNC V2] User: ${userEmail}`);
-    console.log(`🔄 [ASYNC V2] API Key configurada: ${!!LAOZHANG_API_KEY}`);
-    console.log(`🔄 [ASYNC V2] Supabase client: ${!!supabaseClient}`);
-
-    // Verificar se é image edit ou text2image
-    const hasReferenceImages = referenceImages && referenceImages.length > 0;
-    const isImageEdit = hasReferenceImages;
-
-    let nanoRequestBody: ReturnType<typeof buildText2ImageRequest> | ReturnType<typeof buildImageEditRequest>;
-    
-    if (isImageEdit) {
-      console.log(`🎨 [ASYNC V2] Image Edit com ${referenceImages.length} imagens de referência`);
-      nanoRequestBody = buildImageEditRequest(prompt, referenceImages);
-    } else {
-      console.log(`🎨 [ASYNC V2] Text-to-Image`);
-      nanoRequestBody = buildText2ImageRequest(prompt);
-    }
-    
-    console.log(`📦 [ASYNC V2] Request body preparado, modelo: ${nanoRequestBody.model}`);
-
-    // Gerar múltiplas imagens em paralelo
-    const generationPromises = Array.from({ length: num }, async (_, i) => {
-      const imageStartTime = Date.now();
-      console.log(`🔄 [ASYNC V2] ===== INICIANDO IMAGEM ${i + 1}/${num} =====`);
-      
-      try {
-        console.log(`📤 [ASYNC V2] Enviando fetch para imagem ${i + 1}...`);
-        
-        // ✅ TIMEOUT: 240s (4 minutos)
-        // maxDuration = 300s, então 240s deixa margem de 60s
-        // Com retry (2 tentativas), pode usar até 4min + 4min = 8min teórico
-        // Mas maxDuration limita em 5min total
-        const timeoutMs = 240000; // 240 segundos = 4 minutos
-        
-        const nanoResponse = await fetch(LAOZHANG_BASE_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${LAOZHANG_API_KEY}`,
-          },
-          body: JSON.stringify(nanoRequestBody),
-          signal: AbortSignal.timeout(timeoutMs), // ✅ CRÍTICO: Timeout!
-        });
-        
-        const fetchElapsed = Math.round((Date.now() - imageStartTime) / 1000);
-        console.log(`📥 [ASYNC V2] Resposta recebida em ${fetchElapsed}s (imagem ${i + 1}), status: ${nanoResponse.status}`);
-
-        if (!nanoResponse.ok) {
-          const errorText = await nanoResponse.text();
-          console.error(`❌ [ASYNC V2] Erro HTTP ${nanoResponse.status} (imagem ${i + 1}):`, errorText.substring(0, 300));
-          return null;
-        }
-
-        const nanoResult = await nanoResponse.json();
-        console.log(`📋 [ASYNC V2] JSON parseado (imagem ${i + 1})`);
-
-        // Validar resposta
-        if (!isValidNanoBananaResponse(nanoResult)) {
-          console.error(`❌ [ASYNC V2] Resposta inválida (imagem ${i + 1})`);
-          console.error(`❌ [ASYNC V2] Resposta:`, JSON.stringify(nanoResult).substring(0, 200));
-          return null;
-        }
-
-        // Extrair base64 da resposta
-        const content = nanoResult.choices[0].message.content;
-        console.log(`🔍 [ASYNC V2] Extraindo base64 da resposta (imagem ${i + 1})...`);
-        const extractedImage = extractBase64Image(content);
-
-        if (!extractedImage) {
-          console.error(`❌ [ASYNC V2] Erro ao extrair imagem base64 (imagem ${i + 1})`);
-          console.error(`❌ [ASYNC V2] Content preview:`, content.substring(0, 200));
-          return null;
-        }
-        
-        console.log(`✅ [ASYNC V2] Base64 extraído (imagem ${i + 1}), formato: ${extractedImage.format}`);
-
-        // Upload para Storage
-        try {
-          console.log(`📤 [ASYNC V2] Fazendo upload para Storage (imagem ${i + 1})...`);
-          const adminClient = createSupabaseAdminClient();
-          const uploadedImage = await uploadBase64ToStorage(
-            adminClient,
-            extractedImage.dataUrl,
-            userEmail,
-            taskId,
-            i
-          );
-          
-          console.log(`✅ [ASYNC V2] Imagem ${i + 1}/${num} salva no Storage`);
-          return uploadedImage;
-        } catch (uploadError) {
-          console.error(`❌ [ASYNC V2] Erro ao fazer upload (imagem ${i + 1}):`, uploadError);
-          // Fallback para base64
-          return {
-            imageUrl: extractedImage.dataUrl,
-            imageType: extractedImage.format,
-          };
-        }
-      } catch (error) {
-        console.error(`❌ [ASYNC V2] Erro ao gerar imagem ${i + 1}:`, error);
-        return null;
-      }
-    });
-
-    // Aguardar todas as gerações
-    console.log(`⏳ [ASYNC V2] Aguardando Promise.all de ${num} imagens...`);
-    const results = await Promise.all(generationPromises);
-    console.log(`📊 [ASYNC V2] Promise.all concluído, processando resultados...`);
-    
-    const successfulImages = results.filter((img): img is { imageUrl: string; imageType: string } => img !== null);
-    console.log(`📊 [ASYNC V2] Resultados: ${successfulImages.length} sucessos, ${results.length - successfulImages.length} falhas`);
-
-    if (successfulImages.length === 0) {
-      console.error(`❌ [ASYNC V2] NENHUMA imagem gerada com sucesso, marcando como failed...`);
-      const { error: updateError } = await supabaseClient
-        .from('generated_images')
-        .update({ status: 'failed' })
-        .eq('task_id', taskId);
-      
-      if (updateError) {
-        console.error(`❌ [ASYNC V2] Erro ao atualizar para failed:`, updateError);
-      } else {
-        console.log(`✅ [ASYNC V2] TaskId ${taskId} marcado como failed`);
-      }
-      return;
-    }
-
-    console.log(`✅ [ASYNC V2] ${successfulImages.length}/${num} imagens geradas com sucesso`);
-    console.log(`📤 [ASYNC V2] Atualizando banco com status 'completed'...`);
-
-    // Atualizar banco com imagens prontas
-    const { error: updateError } = await supabaseClient
-      .from('generated_images')
-      .update({
-        status: 'completed',
-        image_urls: successfulImages,
-        completed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(), // ✅ Adicionar updated_at
-      })
-      .eq('task_id', taskId);
-    
-    if (updateError) {
-      console.error(`❌ [ASYNC V2] Erro ao atualizar para completed:`, updateError);
-    } else {
-      console.log(`✅ [ASYNC V2] TaskId ${taskId} atualizado para completed com ${successfulImages.length} imagens`);
-    }
-
-    console.log(`✅ [ASYNC V2] ===== FIM DA FUNÇÃO (SUCESSO) =====`);
-  } catch (error) {
-    console.error(`❌ [ASYNC V2] ===== ERRO CRÍTICO =====`);
-    console.error(`❌ [ASYNC V2] Error:`, error);
-    console.error(`❌ [ASYNC V2] Stack:`, error instanceof Error ? error.stack : 'No stack');
-    console.error(`❌ [ASYNC V2] TaskId:`, taskId);
-    
-    // Marcar como failed
-    try {
-      console.log(`🔄 [ASYNC V2] Tentando marcar como failed...`);
-      const { error: updateError } = await supabaseClient
-        .from('generated_images')
-        .update({ status: 'failed' })
-        .eq('task_id', taskId);
-      
-      if (updateError) {
-        console.error(`❌ [ASYNC V2] Erro ao atualizar status para failed:`, updateError);
-      } else {
-        console.log(`✅ [ASYNC V2] TaskId ${taskId} marcado como failed no catch`);
-      }
-    } catch (updateError) {
-      console.error(`❌ [ASYNC V2] Exception ao atualizar status:`, updateError);
-    }
-    
-    console.log(`❌ [ASYNC V2] ===== FIM DA FUNÇÃO (ERRO) =====`);
-  }
-}
-
 export async function POST(request: NextRequest) {
+  const requestId = Math.random().toString(36).substring(7);
+  console.log(`\n🆔 [${requestId}] ===== POST /api/generate-image INICIADO =====`);
+  
   try {
-    console.log('📸 [POST /api/generate-image] Iniciando geração de imagem...');
+    console.log(`🆔 [${requestId}] 📸 Iniciando geração de imagem...`);
 
     // Validar API Key
     if (!NEWPORT_API_KEY) {
@@ -600,9 +405,9 @@ export async function POST(request: NextRequest) {
     let isAsyncGeneration = false; // Flag para controlar se é geração assíncrona
 
     if (model === 'v3-high-quality') {
-      // ===== NANO BANANA 2 (GEMINI 3 PRO) API - MODO CRON =====
-      console.log('🚀 Usando Nano Banana 2 (Gemini 3 Pro) API para v3-high-quality (MODO CRON)');
-      console.log('⚡ Task será processada pelo Vercel Cron a cada 5 minutos');
+      // ===== NANO BANANA 2 (GEMINI 3 PRO) API - MODO CRON APENAS =====
+      console.log(`🆔 [${requestId}] 🚀 Usando Nano Banana 2 (Gemini 3 Pro) API para v3-high-quality (MODO CRON)`);
+      console.log(`🆔 [${requestId}] ⚡ Task será processada pelo Vercel Cron (executa a cada 1 minuto)`);
       
       const hasReferenceImages = referenceImages && referenceImages.length > 0;
       const isImageEdit = hasReferenceImages;
@@ -610,11 +415,11 @@ export async function POST(request: NextRequest) {
       taskId = generateTaskId(generationType);
       responseModel = isImageEdit ? 'gemini-3-pro-image-edit' : 'gemini-3-pro-image-preview';
       
-      // ✅ Modo cron: Apenas salva no banco, Cron processa depois
+      // ✅ Modo cron: Apenas salva no banco, NÃO processa agora
       isAsyncGeneration = true;
       imageUrls = null;
       
-      console.log('✅ Task criada - Cron processará em breve');
+      console.log(`🆔 [${requestId}] ✅ Task criada - Cron processará em até 1 minuto`);
     } else if (model === 'v2-quality') {
       // ===== NANO BANANA (GEMINI) API - Geração ASSÍNCRONA (COM TIMEOUT ROBUSTO) =====
       console.log('🍌 Usando Nano Banana (Gemini) API para v2-quality (MODO ASSÍNCRONO com timeout)');
@@ -663,74 +468,12 @@ export async function POST(request: NextRequest) {
       taskId = generateTaskId(generationType);
       const isImageEdit = hasReferenceImages;
       responseModel = isImageEdit ? 'gemini-2.5-flash-image-edit' : 'gemini-2.5-flash-image-preview';
-      isAsyncGeneration = true; // ✅ Modo assíncrono (continua após reload)
-      imageUrls = null; // Não espera conclusão
       
-      console.log(`🚀 [V2 ASYNC] Preparando geração assíncrona (com timeout robusto):`, {
-        taskId,
-        model: responseModel,
-        numImages: num,
-        hasReferenceImages,
-        promptPreview: prompt.substring(0, 50),
-      });
+      // ✅ Modo cron: Apenas salva no banco, NÃO processa agora
+      isAsyncGeneration = true;
+      imageUrls = null;
       
-      // ✅ Iniciar geração em background (COM TIMEOUT de 60s)
-      generateV2ImageAsync(
-        prompt,
-        referenceImages,
-        userEmail,
-        taskId,
-        num,
-        supabase
-      ).then(() => {
-        console.log(`✅ [V2] Geração assíncrona completada com sucesso: ${taskId}`);
-      }).catch(async (error) => {
-        console.error('❌ [CATCH V2] Erro crítico na geração v2 assíncrona:', error);
-        console.error('❌ [CATCH V2] Stack:', error instanceof Error ? error.stack : 'No stack');
-        console.error('❌ [CATCH V2] TaskId:', taskId);
-        
-        // ✅ GARANTIR que marca como failed (reembolso já está dentro da função)
-        try {
-          console.log(`🔄 [CATCH V2] Tentando marcar taskId ${taskId} como failed...`);
-          
-          // Buscar créditos atuais para reembolsar
-          const { data: currentProfile } = await supabase
-            .from('emails')
-            .select('creditos, creditos_extras')
-            .eq('email', userEmail)
-            .single();
-          
-          if (currentProfile) {
-            // Reembolsar créditos
-            const newCreditos = (currentProfile.creditos || 0) + creditsNeeded;
-            await supabase
-              .from('emails')
-              .update({ creditos: newCreditos })
-              .eq('email', userEmail);
-            
-            console.log(`💰 [CATCH V2] ${creditsNeeded} créditos reembolsados`);
-          }
-          
-          // Marcar como failed
-          const { error: updateError } = await supabase
-            .from('generated_images')
-            .update({ 
-              status: 'failed',
-              updated_at: new Date().toISOString(),
-            })
-            .eq('task_id', taskId);
-          
-          if (updateError) {
-            console.error('❌ [CATCH V2] Erro ao marcar como failed:', updateError);
-          } else {
-            console.log(`✅ [CATCH V2] TaskId ${taskId} marcado como failed`);
-          }
-        } catch (updateError) {
-          console.error('❌ [CATCH V2] Exception ao marcar como failed:', updateError);
-        }
-      });
-      
-      console.log('✅ Geração v2 iniciada em background (continua mesmo após reload)');
+      console.log(`🆔 [${requestId}] ✅ v2-quality: Task criada - Cron processará em até 1 minuto`);
     } else {
       // ===== NEWPORT AI (FLUX) - Geração Assíncrona =====
       console.log('🚀 Usando Newport AI (Flux) para v1-fast');
