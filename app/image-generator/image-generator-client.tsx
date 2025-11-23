@@ -2093,13 +2093,14 @@ export default function ImageGeneratorClient({
                       </svg>
                       <span>
                         {(() => {
-                          const hasRef = (selectedModel.id === 'v2-quality' || selectedModel.id === 'v3-high-quality') && referenceImages.length > 0;
                           if (selectedModel.id === 'v3-high-quality') {
                             // v3: Custo fixo de 10 créditos por imagem
                             return numImages * 10;
                           } else if (selectedModel.id === 'v2-quality') {
-                            return numImages * (hasRef ? 12 : 8);
+                            // v2: Custo fixo de 8 créditos (com ou sem referência)
+                            return numImages * 8;
                           } else {
+                            // v1-fast: 2 créditos
                             return numImages * 2;
                           }
                         })()}
