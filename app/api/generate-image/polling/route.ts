@@ -295,7 +295,7 @@ export async function POST(request: NextRequest) {
           console.log(`📤 Fazendo upload para Supabase Storage: ${fileName}`);
           
           // Upload para Supabase Storage
-          const { data: uploadData, error: uploadError } = await supabase.storage
+          const { error: uploadError } = await supabase.storage
             .from('generated-images')
             .upload(fileName, imageBlob, {
               contentType: `image/${imageType}`,

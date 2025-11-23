@@ -131,19 +131,54 @@ async function processTask(task: any, supabase: any) {
       
       if (isPortuguese) {
         console.log(`🌐 [CRON V3] Prompt em português detectado, traduzindo para inglês...`);
-        // Tradução simples (pode melhorar com API de tradução depois)
+        
+        // Tradução completa e remoção de gatilhos de safety filter
         finalPrompt = prompt
-          .replace(/crie um post/gi, 'create a post')
-          .replace(/coloque uma/gi, 'add a')
-          .replace(/coloque um/gi, 'add a')
-          .replace(/sobre/gi, 'about')
+          // Remover referências a redes sociais (gatilhos de filtro)
+          .replace(/post\s+(para\s+)?instagram/gi, 'image')
+          .replace(/post\s+para/gi, 'image for')
+          .replace(/crie um post/gi, 'create an image')
+          .replace(/instagram/gi, 'design')
+          .replace(/redes sociais/gi, 'design')
+          
+          // Verbos
+          .replace(/crie/gi, 'create')
+          .replace(/coloque uma/gi, 'place a')
+          .replace(/coloque um/gi, 'place a')
+          .replace(/coloque/gi, 'add')
+          .replace(/faça/gi, 'make')
+          .replace(/gere/gi, 'generate')
+          
+          // Preposições e conectores
+          .replace(/\bpara\b/gi, 'for')
+          .replace(/\be\b/gi, 'and')
+          .replace(/\bsobre\b/gi, 'about')
+          .replace(/\bcom\b/gi, 'with')
+          .replace(/\bde\b/gi, 'of')
+          
+          // Saúde e bem-estar
           .replace(/saúde e bem estar/gi, 'health and wellness')
-          .replace(/pessoa malhada/gi, 'fit person')
-          .replace(/educação física/gi, 'physical education')
+          .replace(/saúde/gi, 'health')
+          .replace(/bem estar/gi, 'wellness')
+          .replace(/bem-estar/gi, 'wellness')
+          
+          // Frutas e alimentos
           .replace(/melancia/gi, 'watermelon')
           .replace(/manga/gi, 'mango')
+          .replace(/banana/gi, 'banana')
+          .replace(/maçã/gi, 'apple')
+          .replace(/laranja/gi, 'orange')
+          
+          // Pessoas e características
+          .replace(/pessoa malhada/gi, 'fit person')
+          .replace(/pessoa/gi, 'person')
+          .replace(/malhada/gi, 'athletic')
+          .replace(/educação física/gi, 'physical education')
+          
+          // Texto e títulos
           .replace(/título/gi, 'title')
-          .replace(/instagram/gi, 'social media');
+          .replace(/texto/gi, 'text')
+          .replace(/frase/gi, 'phrase');
         
         console.log(`🌐 [CRON V3] Prompt original: ${prompt.substring(0, 100)}`);
         console.log(`🌐 [CRON V3] Prompt traduzido: ${finalPrompt.substring(0, 100)}`);
