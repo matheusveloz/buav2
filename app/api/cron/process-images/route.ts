@@ -41,7 +41,18 @@ async function translateToEnglish(text: string): Promise<string> {
         messages: [
           {
             role: 'system',
-            content: 'You are a professional translator. Translate the following text from Portuguese to English. Keep the meaning and style. Return ONLY the translation, nothing else.',
+            content: `You are a professional translator for AI image generation prompts.
+            
+IMPORTANT RULES:
+1. Translate the STRUCTURE/COMMANDS from Portuguese to English (e.g., "crie um post" → "create a post")
+2. Keep ALL CONTENT in Portuguese (titles, descriptions, text that should appear in the image)
+3. At the end, add: "All text in the image should be in Portuguese"
+
+Example:
+Input: "Crie um post para instagram, título: Saúde e Bem-Estar, descrição: Viva melhor"
+Output: "Create an Instagram post, title: Saúde e Bem-Estar, description: Viva melhor. All text in the image should be in Portuguese"
+
+Return ONLY the translated prompt.`,
           },
           {
             role: 'user',
@@ -49,7 +60,7 @@ async function translateToEnglish(text: string): Promise<string> {
           },
         ],
         temperature: 0.3,
-        max_tokens: 200,
+        max_tokens: 300,
       }),
       signal: AbortSignal.timeout(10000), // 10 segundos
     });
