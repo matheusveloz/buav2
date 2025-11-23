@@ -18,6 +18,62 @@ export const maxDuration = 300; // 5 minutos (Vercel Pro)
 
 const LAOZHANG_API_KEY = process.env.LAOZHANG_API_KEY;
 const LAOZHANG_BASE_URL = 'https://api.laozhang.ai/v1/chat/completions';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
+// Função auxiliar para traduzir prompt usando OpenAI
+async function translateToEnglish(text: string): Promise<string> {
+  if (!OPENAI_API_KEY) {
+    console.warn('⚠️ [TRANSLATE] OPENAI_API_KEY não configurada, usando texto original');
+    return text;
+  }
+
+  try {
+    console.log('🌐 [TRANSLATE] Traduzindo prompt para inglês usando GPT...');
+    
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini', // Modelo mais barato e rápido
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a professional translator. Translate the following text from Portuguese to English. Keep the meaning and style. Return ONLY the translation, nothing else.',
+          },
+          {
+            role: 'user',
+            content: text,
+          },
+        ],
+        temperature: 0.3,
+        max_tokens: 200,
+      }),
+      signal: AbortSignal.timeout(10000), // 10 segundos
+    });
+
+    if (!response.ok) {
+      console.error('❌ [TRANSLATE] Erro na API OpenAI:', response.status);
+      return text; // Fallback para texto original
+    }
+
+    const result = await response.json();
+    const translation = result.choices[0]?.message?.content?.trim();
+
+    if (!translation) {
+      console.error('❌ [TRANSLATE] Resposta vazia da API');
+      return text;
+    }
+
+    console.log('✅ [TRANSLATE] Tradução concluída');
+    return translation;
+  } catch (error) {
+    console.error('❌ [TRANSLATE] Erro ao traduzir:', error);
+    return text; // Fallback para texto original
+  }
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -122,66 +178,21 @@ async function processTask(task: any, supabase: any) {
       // ========== PROCESSAR V3 (Gemini 3 Pro / Nano Banana 2) ==========
       console.log(`🚀 [CRON V3] Processando v3-high-quality: ${taskId}`);
 
-      // ✅ TRADUZIR PROMPT PARA INGLÊS (v3 funciona melhor com inglês)
+      // ✅ TRADUZIR PROMPT PARA INGLÊS usando OpenAI GPT (mais preciso!)
       // Detectar se prompt está em português
-      const portugueseKeywords = ['crie', 'coloque', 'faça', 'gere', 'post', 'instagram', 'sobre'];
+      const portugueseKeywords = ['crie', 'coloque', 'faça', 'gere', 'post', 'instagram', 'sobre', 'para'];
       const isPortuguese = portugueseKeywords.some(keyword => prompt.toLowerCase().includes(keyword));
       
       let finalPrompt = prompt;
       
       if (isPortuguese) {
-        console.log(`🌐 [CRON V3] Prompt em português detectado, traduzindo para inglês...`);
+        console.log(`🌐 [CRON V3] Prompt em português detectado`);
+        console.log(`🌐 [CRON V3] Prompt original: ${prompt}`);
         
-        // Tradução completa e remoção de gatilhos de safety filter
-        finalPrompt = prompt
-          // Remover referências a redes sociais (gatilhos de filtro)
-          .replace(/post\s+(para\s+)?instagram/gi, 'image')
-          .replace(/post\s+para/gi, 'image for')
-          .replace(/crie um post/gi, 'create an image')
-          .replace(/instagram/gi, 'design')
-          .replace(/redes sociais/gi, 'design')
-          
-          // Verbos
-          .replace(/crie/gi, 'create')
-          .replace(/coloque uma/gi, 'place a')
-          .replace(/coloque um/gi, 'place a')
-          .replace(/coloque/gi, 'add')
-          .replace(/faça/gi, 'make')
-          .replace(/gere/gi, 'generate')
-          
-          // Preposições e conectores
-          .replace(/\bpara\b/gi, 'for')
-          .replace(/\be\b/gi, 'and')
-          .replace(/\bsobre\b/gi, 'about')
-          .replace(/\bcom\b/gi, 'with')
-          .replace(/\bde\b/gi, 'of')
-          
-          // Saúde e bem-estar
-          .replace(/saúde e bem estar/gi, 'health and wellness')
-          .replace(/saúde/gi, 'health')
-          .replace(/bem estar/gi, 'wellness')
-          .replace(/bem-estar/gi, 'wellness')
-          
-          // Frutas e alimentos
-          .replace(/melancia/gi, 'watermelon')
-          .replace(/manga/gi, 'mango')
-          .replace(/banana/gi, 'banana')
-          .replace(/maçã/gi, 'apple')
-          .replace(/laranja/gi, 'orange')
-          
-          // Pessoas e características
-          .replace(/pessoa malhada/gi, 'fit person')
-          .replace(/pessoa/gi, 'person')
-          .replace(/malhada/gi, 'athletic')
-          .replace(/educação física/gi, 'physical education')
-          
-          // Texto e títulos
-          .replace(/título/gi, 'title')
-          .replace(/texto/gi, 'text')
-          .replace(/frase/gi, 'phrase');
+        // Traduzir usando OpenAI GPT
+        finalPrompt = await translateToEnglish(prompt);
         
-        console.log(`🌐 [CRON V3] Prompt original: ${prompt.substring(0, 100)}`);
-        console.log(`🌐 [CRON V3] Prompt traduzido: ${finalPrompt.substring(0, 100)}`);
+        console.log(`🌐 [CRON V3] Prompt traduzido: ${finalPrompt}`);
       }
 
       for (let i = 0; i < num; i++) {
@@ -191,7 +202,7 @@ async function processTask(task: any, supabase: any) {
         const requestBody: any = {
           contents: [
             {
-              parts: [{ text: finalPrompt }], // ✅ Usar prompt traduzido
+              parts: [{ text: finalPrompt }], // ✅ Usar prompt traduzido por GPT
             },
           ],
           generationConfig: {
