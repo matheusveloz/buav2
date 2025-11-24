@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/supabase-admin';
 import { uploadBase64ToStorage } from '@/lib/upload-base64-to-storage';
+import { replaceSupabaseDomain } from '@/lib/custom-domain';
 import {
   buildText2ImageRequest,
   buildImageEditRequest,

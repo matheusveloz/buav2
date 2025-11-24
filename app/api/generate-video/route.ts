@@ -66,67 +66,31 @@ export async function POST(request: NextRequest) {
     const body: GenerateVideoRequest = await request.json();
     const { prompt, imageBase64, videoBase64, model = 'sora-2', seconds = 4, size = '720x1280' } = body;
 
-    // 🔍 VERIFICAR CELEBRIDADES/CRIANÇAS NA IMAGEM USANDO GPT-4o (se houver imagem)
-    if (imageBase64) {
-      try {
-        console.log('🔍 Analisando imagem com GPT-4o Vision...');
-        const { detectCelebrityWithGPT, shouldBlockGeneration, getBlockMessage } = await import('@/lib/celebrity-detection-gpt');
-        
-        const detectionResult = await detectCelebrityWithGPT(imageBase64);
-        
-        if (shouldBlockGeneration(detectionResult)) {
-          console.warn(`🚫 BLOQUEIO ATIVADO por GPT-4o:`, {
-            isCelebrity: detectionResult.isCelebrity,
-            isChild: detectionResult.isChild,
-            name: detectionResult.name,
-            estimatedAge: detectionResult.estimatedAge,
-            confidence: detectionResult.confidence,
-          });
-          
-          return NextResponse.json({
-            error: detectionResult.isChild ? '🚫 Proteção Infantil' : '🚫 Celebridade Detectada',
-            details: getBlockMessage(detectionResult),
-            celebrity: detectionResult.name,
-            isChild: detectionResult.isChild,
-            estimatedAge: detectionResult.estimatedAge,
-            confidence: detectionResult.confidence,
-            reason: detectionResult.reason,
-            prohibited: true,
-          }, { status: 400 });
-        }
-        
-        console.log(`✅ Imagem aprovada por GPT-4o`);
-      } catch (error) {
-        // Se a detecção falhar, continuar (não bloquear por erro técnico)
-        console.error('⚠️ Erro na detecção GPT-4o (continuando):', error);
-      }
-    }
-
     // 🛡️ MODERAR PROMPT (conteúdo explícito/impróprio) - ANTES DE TUDO!
     try {
-      console.log('🛡️ Moderando conteúdo do prompt...');
-      const { moderatePrompt, getModerationBlockMessage } = await import('@/lib/content-moderation');
+      console.log('🛡️ [BUUA 1.0] Moderando conteúdo...');
+      const { moderateContent } = await import('@/lib/content-moderation');
       
-      const moderationResult = await moderatePrompt(prompt);
+      // BUUA 1.0 (LEGADO): Só permite desenhos e objetos (bloqueia rostos reais)
+      const moderationResult = await moderateContent(prompt, imageBase64, '1.0');
       
-      if (moderationResult.flagged) {
-        console.warn(`🚫 CONTEÚDO IMPRÓPRIO DETECTADO no prompt:`, {
-          categories: moderationResult.categories,
+      if (moderationResult.blocked) {
+        console.warn(`🚫 [BUUA 1.0] CONTEÚDO BLOQUEADO:`, {
           reason: moderationResult.reason,
         });
         
         return NextResponse.json({
-          error: '🚫 Conteúdo Impróprio',
-          details: getModerationBlockMessage(moderationResult),
+          error: '🚫 Conteúdo Não Permitido no Buua 1.0',
+          details: moderationResult.details,
           moderationReason: moderationResult.reason,
-          categories: moderationResult.categories,
           prohibited: true,
+          version: '1.0',
         }, { status: 400 });
       }
       
-      console.log('✅ Prompt aprovado pela moderação');
+      console.log('✅ [BUUA 1.0] Conteúdo aprovado pela moderação');
     } catch (error) {
-      console.error('⚠️ Erro na moderação do prompt (continuando):', error);
+      console.error('⚠️ Erro na moderação (continuando):', error);
     }
 
     console.log('📋 Dados da requisição:', {

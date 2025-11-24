@@ -1,16 +1,8 @@
-# Ignorar scripts e ferramentas de migração
-tools/
-scripts/
-migration-report-*.json
+# Arquivos de upload dos usuários (não devem ir para deploy)
+public/uploads/**
 
-# Ignorar arquivos SQL
-supabase/*.sql
-
-# Ignorar arquivos de desenvolvimento
-.env.local
-.env.development
-
-# Ignorar testes
-__tests__
-*.test.ts
-*.test.tsx
+# Cache e build
+node_modules
+.next
+.git
+*.log

@@ -4,6 +4,7 @@ import { rateLimiter } from '@/lib/rate-limiter';
 import {
   generateTaskId,
 } from '@/lib/nano-banana-helper';
+import { replaceSupabaseDomain } from '@/lib/custom-domain';
 
 export const dynamic = 'force-dynamic';
 // ⚠️ CRÍTICO: maxDuration DEVE ser maior que todos os timeouts de fetch!
@@ -125,6 +126,57 @@ export async function POST(request: NextRequest) {
     // Validações
     if (!prompt || prompt.trim().length === 0) {
       return NextResponse.json({ error: 'Prompt é obrigatório' }, { status: 400 });
+    }
+
+    // 🛡️ MODERAR CONTEÚDO (prompt + imagens de referência)
+    try {
+      console.log('🛡️ Moderando conteúdo...');
+      const { moderateContent } = await import('@/lib/content-moderation');
+      
+      // MODERAÇÃO: Detectar prompt impróprio
+      const promptModeration = await moderateContent(prompt, undefined, '2.0');
+      
+      if (promptModeration.blocked) {
+        console.warn(`🚫 CONTEÚDO BLOQUEADO (prompt):`, {
+          reason: promptModeration.reason,
+        });
+        
+        return NextResponse.json({
+          error: '🚫 Conteúdo Impróprio',
+          details: promptModeration.details,
+          moderationReason: promptModeration.reason,
+          prohibited: true,
+        }, { status: 400 });
+      }
+
+      // MODERAÇÃO: Detectar imagens de referência impróprias
+      if (referenceImages && referenceImages.length > 0) {
+        console.log(`🛡️ Moderando ${referenceImages.length} imagem(ns) de referência...`);
+        
+        for (let i = 0; i < referenceImages.length; i++) {
+          const imageModeration = await moderateContent('', referenceImages[i], '2.0');
+          
+          if (imageModeration.blocked) {
+            console.warn(`🚫 IMAGEM DE REFERÊNCIA ${i + 1} BLOQUEADA:`, {
+              reason: imageModeration.reason,
+            });
+            
+            return NextResponse.json({
+              error: `🚫 Imagem de Referência ${i + 1} Não Permitida`,
+              details: imageModeration.details,
+              moderationReason: imageModeration.reason,
+              prohibited: true,
+              imageIndex: i,
+            }, { status: 400 });
+          }
+        }
+        
+        console.log(`✅ ${referenceImages.length} imagem(ns) de referência aprovadas`);
+      }
+      
+      console.log('✅ Conteúdo aprovado pela moderação');
+    } catch (error) {
+      console.error('⚠️ Erro na moderação (continuando):', error);
     }
 
     // ⚡ LIMITE DE GERAÇÕES SIMULTÂNEAS: Verificar imagens em processamento

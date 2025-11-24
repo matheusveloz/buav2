@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase-server';
 import { createSupabaseAdminClient } from '@/lib/supabase-admin';
+import { replaceSupabaseDomain } from '@/lib/custom-domain';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -73,12 +74,12 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ Upload completo:', uploadData.path);
 
-    // Obter URL pública
+    // Obter URL pública com domínio customizado
     const { data: publicUrlData } = adminClient.storage
       .from('generated-images')
       .getPublicUrl(path);
 
-    const publicUrl = publicUrlData.publicUrl;
+    const publicUrl = replaceSupabaseDomain(publicUrlData.publicUrl);
 
     console.log(`✅ URL pública gerada: ${publicUrl.substring(0, 80)}...`);
     console.log(`📊 Economia: ${Math.round(file.size / 1024)}KB → ${publicUrl.length} bytes`);

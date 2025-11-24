@@ -23,6 +23,7 @@ interface ModerationResult {
  * Custo: GRÁTIS! (API de moderação não cobra)
  * 
  * ⚡ Com timeout de 3 segundos para não travar a experiência
+ * 🎬 AJUSTADO: Permite conteúdo de ação/esportes radicais
  */
 export async function moderatePrompt(prompt: string): Promise<ModerationResult> {
   try {
@@ -71,28 +72,61 @@ export async function moderatePrompt(prompt: string): Promise<ModerationResult> 
     const data = await response.json();
     const result = data.results[0];
 
-    if (result.flagged) {
+    // 🎬 FILTRO INTELIGENTE: Detectar falsos positivos de ação/esportes
+    const isActionSports = /\b(parkour|bicicleta|skate|gopro|câmera|primeira pessoa|esporte|radical|acrobacia|salto|pulo|escalada|surf|snowboard|motocross)\b/i.test(prompt);
+    const hasViolenceContext = /\b(sangue|matar|morte|assassinar|tortura|arma|tiro|facada|espancamento|briga|agressão)\b/i.test(prompt);
+    
+    // Se é conteúdo de ação/esportes E não tem violência explícita, PERMITIR
+    if (isActionSports && !hasViolenceContext) {
+      console.log('✅ Prompt aprovado: Conteúdo de ação/esportes radicais detectado');
+      return {
+        flagged: false,
+        categories: {},
+        categoryScores: result.category_scores,
+        reason: 'action_sports_allowed',
+      };
+    }
+
+    // Para outras categorias, usar score threshold mais alto (menos sensível)
+    const isViolenceHighScore = (result.category_scores.violence || 0) > 0.8; // Era blocado com score > 0.5
+    const isViolenceGraphicHighScore = (result.category_scores['violence/graphic'] || 0) > 0.8;
+    
+    // Só bloquear violência se for REALMENTE alta (> 80%)
+    const shouldBlockViolence = (result.categories.violence || result.categories['violence/graphic']) && 
+                                (isViolenceHighScore || isViolenceGraphicHighScore);
+
+    // Criar flagged customizado
+    const customFlagged = 
+      result.categories.sexual || 
+      result.categories['sexual/minors'] || 
+      result.categories.hate || 
+      result.categories['harassment/threatening'] || 
+      result.categories['self-harm'] || 
+      shouldBlockViolence;
+
+    if (customFlagged) {
       console.warn('🚫 CONTEÚDO IMPRÓPRIO DETECTADO:', {
         categories: result.categories,
         categoryScores: result.category_scores,
+        customFiltered: true,
       });
     } else {
       console.log('✅ Prompt aprovado pela moderação');
     }
 
     return {
-      flagged: result.flagged,
+      flagged: customFlagged,
       categories: {
         sexual: result.categories.sexual || result.categories['sexual/minors'],
-        violence: result.categories.violence || result.categories['violence/graphic'],
+        violence: shouldBlockViolence,
         hate: result.categories.hate,
         harassment: result.categories.harassment || result.categories['harassment/threatening'],
         selfHarm: result.categories['self-harm'],
         sexualMinors: result.categories['sexual/minors'],
-        violenceGraphic: result.categories['violence/graphic'],
+        violenceGraphic: result.categories['violence/graphic'] && isViolenceGraphicHighScore,
       },
       categoryScores: result.category_scores,
-      reason: getModerationReason(result.categories),
+      reason: customFlagged ? getModerationReason(result.categories) : undefined,
     };
 
   } catch (error) {
@@ -157,8 +191,13 @@ export function getModerationBlockMessage(result: ModerationResult): string {
 
 /**
  * 🎯 MODERAÇÃO COMPLETA: Prompt + Imagem
+ * @param version - '1.0' para Buua Legado (só desenhos/objetos), '2.0' para Buua High (pessoas permitidas)
  */
-export async function moderateContent(prompt: string, imageBase64?: string): Promise<{
+export async function moderateContent(
+  prompt: string, 
+  imageBase64?: string,
+  version: '1.0' | '2.0' = '2.0'
+): Promise<{
   blocked: boolean;
   reason?: string;
   details?: string;
@@ -174,18 +213,42 @@ export async function moderateContent(prompt: string, imageBase64?: string): Pro
     };
   }
 
-  // 2. Moderar imagem (celebridades + crianças)
+  // 2. Moderar imagem (celebridades + crianças + rostos reais + nudez + obsceno)
   if (imageBase64) {
-    const { detectCelebrityWithGPT, shouldBlockGeneration, getBlockMessage } = await import('./celebrity-detection-gpt');
+    const { 
+      detectCelebrityWithGPT, 
+      shouldBlockBuua10, 
+      shouldBlockBuua20,
+      getBlockMessageBuua10,
+      getBlockMessageBuua20,
+    } = await import('./celebrity-detection-gpt');
     
     const detectionResult = await detectCelebrityWithGPT(imageBase64);
     
-    if (shouldBlockGeneration(detectionResult)) {
-      return {
-        blocked: true,
-        reason: detectionResult.isChild ? 'child' : 'celebrity',
-        details: getBlockMessage(detectionResult),
-      };
+    // Aplicar regras específicas por versão
+    if (version === '1.0') {
+      // BUUA 1.0: Bloquear rostos reais, nudez, obsceno
+      if (shouldBlockBuua10(detectionResult)) {
+        return {
+          blocked: true,
+          reason: detectionResult.hasNudity ? 'nudity' : 
+                  detectionResult.hasObscene ? 'obscene' : 
+                  detectionResult.hasRealFace ? 'real_face' : 'content',
+          details: getBlockMessageBuua10(detectionResult),
+        };
+      }
+    } else {
+      // BUUA 2.0: Bloquear crianças, celebridades, nudez, obsceno (permite pessoas)
+      if (shouldBlockBuua20(detectionResult)) {
+        return {
+          blocked: true,
+          reason: detectionResult.hasNudity ? 'nudity' : 
+                  detectionResult.hasObscene ? 'obscene' :
+                  detectionResult.isChild ? 'child' : 
+                  detectionResult.isCelebrity ? 'celebrity' : 'content',
+          details: getBlockMessageBuua20(detectionResult),
+        };
+      }
     }
   }
 

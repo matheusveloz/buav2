@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase-server';
+import { replaceSupabaseDomain, replaceSupabaseDomainsInArray } from '@/lib/custom-domain';
 
 export const dynamic = 'force-dynamic';
 
@@ -308,12 +309,12 @@ export async function POST(request: NextRequest) {
             continue;
           }
           
-          // Obter URL pública
+          // Obter URL pública com domínio customizado
           const { data: publicUrlData } = supabase.storage
             .from('generated-images')
             .getPublicUrl(fileName);
           
-          const publicUrl = publicUrlData.publicUrl;
+          const publicUrl = replaceSupabaseDomain(publicUrlData.publicUrl);
           
           console.log(`✅ Imagem ${i + 1} salva com sucesso:`, publicUrl);
           

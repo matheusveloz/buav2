@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from '@/lib/supabase-server';
+import { replaceSupabaseDomain } from '@/lib/custom-domain';
 
 /**
  * Converte data URL para Blob
@@ -51,12 +52,12 @@ export async function uploadImageToStorage(
     throw error;
   }
   
-  // Retornar URL pública
+  // Retornar URL pública com domínio customizado
   const { data: { publicUrl } } = supabase.storage
     .from('generated-images')
     .getPublicUrl(fileName);
   
-  return publicUrl;
+  return replaceSupabaseDomain(publicUrl);
 }
 
 /**

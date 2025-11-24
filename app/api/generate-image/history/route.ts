@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase-server';
+import { replaceSupabaseDomain } from '@/lib/custom-domain';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 10; // Timeout de 10 segundos para Vercel
@@ -71,8 +72,22 @@ export async function GET(request: NextRequest) {
 
     console.log(`✅ ${images?.length || 0} imagens encontradas (total: ${count})`);
 
+    // Substituir URLs do Supabase pelo domínio customizado
+    const imagesWithCustomDomain = images?.map((image: Record<string, unknown>) => {
+      if (image.image_urls && Array.isArray(image.image_urls)) {
+        return {
+          ...image,
+          image_urls: image.image_urls.map((urlData: { imageUrl: string; imageType: string }) => ({
+            imageUrl: replaceSupabaseDomain(urlData.imageUrl),
+            imageType: urlData.imageType,
+          })),
+        };
+      }
+      return image;
+    });
+
     return NextResponse.json({
-      images: images || [],
+      images: imagesWithCustomDomain || [],
       pagination: {
         total: count || 0,
         limit,

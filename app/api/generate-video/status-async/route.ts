@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase-server';
+import { replaceSupabaseDomain } from '@/lib/custom-domain';
 
 export const dynamic = 'force-dynamic';
 
@@ -194,13 +195,13 @@ export async function GET(request: NextRequest) {
           });
         }
 
-        // Obter URL pública
+        // Obter URL pública com domínio customizado
         const { data: publicUrlData } = supabase
           .storage
           .from('generated-videos')
           .getPublicUrl(filePath);
 
-        const finalVideoUrl = publicUrlData.publicUrl;
+        const finalVideoUrl = replaceSupabaseDomain(publicUrlData.publicUrl);
 
         // Atualizar banco com URL final
         await supabase

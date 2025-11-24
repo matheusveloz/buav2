@@ -40,4 +40,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# User uploads (development only, production uses Supabase Storage)
+/public/uploads/**
+
 .vercel

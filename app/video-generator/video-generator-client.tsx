@@ -27,13 +27,6 @@
     model: string;
   };
 
-  type TaskStatus = {
-    jobId: string;
-    generationId: string;
-    status: 'processing' | 'completed' | 'failed';
-    placeholderIds: string[];
-  };
-
   type ModelConfig = {
     id: 'buua-retrato' | 'buua-paisagem' | 'veo-retrato' | 'veo-paisagem';
     name: string;
@@ -111,7 +104,6 @@
     const [videos, setVideos] = useState<GeneratedVideo[]>([]);
     const [prompt, setPrompt] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
-    const [activeTasks, setActiveTasks] = useState<TaskStatus[]>([]);
     const [profile, setProfile] = useState<Profile>(initialProfile);
     const [selectedVideo, setSelectedVideo] = useState<GeneratedVideo | null>(null);
     const [isMounted, setIsMounted] = useState(false);
@@ -120,6 +112,7 @@
     const [isChatMinimized, setIsChatMinimized] = useState(false);
     const [lastScrollY, setLastScrollY] = useState(0);
     const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+    const [isUploadingImage, setIsUploadingImage] = useState(false); // 🆕 Loading state para upload
     // Buua 1.0 Retrato como padrão
     const [selectedModel, setSelectedModel] = useState<ModelConfig>(MODEL_CONFIGS[0]);
     // VEO: Retrato como padrão
@@ -139,7 +132,21 @@
     const [isImprovingPrompt, setIsImprovingPrompt] = useState(false);
     const [selectedVersion, setSelectedVersion] = useState<'1.0' | '2.0'>('1.0'); // ⭐ Seletor de versão
     const [isVersionDropdownOpen, setIsVersionDropdownOpen] = useState(false); // ⭐ Estado do dropdown versão
-    const [isOrientationDropdownOpen, setIsOrientationDropdownOpen] = useState(false); // ⭐ Estado do dropdown orientação
+    const [isOrientationDropdownOpen, setIsOrientationDropdownOpen] = useState(false);
+    const [previousVersion, setPreviousVersion] = useState<'1.0' | '2.0'>('1.0'); // Guardar versão anterior
+
+    // 🧹 LIMPAR IMAGEM ao trocar de versão
+    useEffect(() => {
+      // Só limpa se a versão realmente mudou (não na primeira renderização)
+      if (previousVersion !== selectedVersion && uploadedImage) {
+        console.log(`🧹 Versão mudou de ${previousVersion} para ${selectedVersion}, limpando imagem...`);
+        setUploadedImage(null);
+      }
+      
+      // Atualizar versão anterior
+      setPreviousVersion(selectedVersion);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedVersion]); // Intencionalmente não inclui uploadedImage // ⭐ Estado do dropdown orientação
     const [isImageWarningExpanded, setIsImageWarningExpanded] = useState(false); // ⭐ Estado do aviso de imagem expandido
 
   // Bloquear scroll do body quando modal está aberto
@@ -189,7 +196,6 @@
       }
     }, [isHighQuality, selectedModel.orientation]);
     
-    const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const versionDropdownRef = useRef<HTMLDivElement>(null); // ⭐ Ref para o dropdown versão
@@ -216,6 +222,110 @@
       return () => {
         document.head.removeChild(link);
       };
+    }, []);
+
+    // ==================== POLLING FUNCTIONS ====================
+    // ⭐ Polling específico para Buua 2.0 (verifica direto no banco)
+    const startPollingBuua2 = useCallback((generationId: string) => {
+      const pollIntervalTime = 5000; // 5s
+      
+      console.log(`🔄 Iniciando polling Buua 2.0 para:`, generationId, `(verificando a cada ${pollIntervalTime/1000}s)`);
+      
+      const pollInterval = setInterval(async () => {
+        try {
+          const response = await fetch(`/api/generate-video/status-async?id=${generationId}`);
+          const data = await response.json();
+
+          console.log('📊 Status Buua 2.0:', data);
+
+          if (data.status === 'completed' && data.videoUrl) {
+            // ⭐ Vídeo pronto! Atualizar o card
+            setVideos((prev) => 
+              prev.map((video) => 
+                video.id === generationId
+                  ? { ...video, videoUrl: data.videoUrl, isLoading: false }
+                  : video
+              )
+            );
+            
+            clearInterval(pollInterval);
+            
+            // Modal de notificação removido conforme solicitado
+          } else if (data.status === 'failed') {
+            // Vídeo falhou - remover card
+            setVideos((prev) => prev.filter((video) => video.id !== generationId));
+            clearInterval(pollInterval);
+            
+            Swal.fire({
+              title: '❌ Erro',
+              text: data.message || 'Não foi possível gerar o vídeo. Seus créditos foram reembolsados.',
+              icon: 'error',
+            });
+          }
+          // Se ainda está processing, continuar esperando
+        } catch (error) {
+          console.error('Erro no polling Buua 2.0:', error);
+        }
+      }, pollIntervalTime);
+
+      // Limpar após 10 minutos (timeout)
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        console.log('⏰ Timeout polling Buua 2.0 - 10min');
+      }, 600000);
+    }, []);
+
+    // Polling para verificar se o vídeo está pronto (Sync ou Async)
+    const startPolling = useCallback((generationId: string, apiType: 'sync' | 'async' = 'async') => {
+      const endpoint = apiType === 'sync' 
+        ? `/api/generate-video/status?id=${generationId}`
+        : `/api/generate-video/status-async?id=${generationId}`;
+      
+      const pollIntervalTime = apiType === 'sync' ? 3000 : 5000; // 3s para sync, 5s para async
+      
+      console.log(`🔄 Iniciando polling ${apiType} para:`, generationId, `(verificando a cada ${pollIntervalTime/1000}s)`);
+      
+      const pollInterval = setInterval(async () => {
+        try {
+          const response = await fetch(endpoint);
+          const data = await response.json();
+
+          console.log('📊 Status atual:', data);
+
+          if (data.status === 'completed' && data.videoUrl) {
+            // Atualizar o card com o vídeo pronto
+            setVideos((prev) => 
+              prev.map((video) => 
+                video.id === generationId
+                  ? { ...video, videoUrl: data.videoUrl, isLoading: false }
+                  : video
+              )
+            );
+            
+            clearInterval(pollInterval);
+            
+            // Modal de notificação removido conforme solicitado
+          } else if (data.status === 'failed') {
+            // Remover card se falhou
+            setVideos((prev) => prev.filter((video) => video.id !== generationId));
+            clearInterval(pollInterval);
+            
+            Swal.fire({
+              title: '❌ Erro',
+              text: data.message || 'Não foi possível gerar o vídeo. Seus créditos foram reembolsados.',
+              icon: 'error',
+            });
+          }
+          // Se ainda está processing, continuar esperando
+        } catch (error) {
+          console.error('Erro no polling:', error);
+        }
+      }, pollIntervalTime);
+
+      // Limpar após 10 minutos (timeout)
+      setTimeout(() => {
+        clearInterval(pollInterval);
+      }, 600000);
     }, []);
 
     // ==================== 🚀 VERIFICAR VÍDEOS PENDENTES AO CARREGAR ====================
@@ -259,14 +369,15 @@
               return [...newVideos, ...prev];
             });
             
-            // Iniciar polling para cada vídeo pendente (EXCETO 2.0)
+            // Iniciar polling para cada vídeo pendente (TODOS - incluindo 2.0)
             data.videos.forEach((v: { id: string; model: string }) => {
-              // ⚠️ Buua 2.0 não precisa de polling (retorna vídeo pronto imediatamente)
               const isBuua2Video = v.model?.includes('veo-') || v.model?.includes('Veo') || v.model?.includes('Buua 2.0');
-              if (!isBuua2Video) {
-                startPolling(v.id, 'async');
+              if (isBuua2Video) {
+                console.log('🔄 Iniciando polling Buua 2.0 para:', v.id);
+                startPollingBuua2(v.id);
               } else {
-                console.log('⏭️ Pulando polling para vídeo Buua 2.0:', v.id);
+                console.log('🔄 Iniciando polling Buua 1.0 para:', v.id);
+                startPolling(v.id, 'async');
               }
             });
           } else {
@@ -278,7 +389,7 @@
       };
 
       checkPendingVideos();
-    }, [isMounted]);
+    }, [isMounted, startPollingBuua2, startPolling]);
 
     // Salvar no localStorage
     useEffect(() => {
@@ -377,23 +488,22 @@
           // Combinar: processing primeiro (no topo), depois completed (ambos já ordenados)
           setVideos([...processingVideos, ...completedVideos]);
 
-          // Adicionar tarefas de processamento ao polling (EXCETO 2.0)
-          const processingTasks = allVideos
-            .filter((v: { status: string; job_id: string; model: string }) => {
-              // Buua 2.0 não precisa de polling (retorna vídeo pronto)
-              const isBuua2Video = v.model?.includes('veo-') || v.model?.includes('Veo') || v.model?.includes('Buua 2.0');
-              return v.status === 'processing' && v.job_id && !isBuua2Video;
-            })
-            .map((v: { job_id: string; id: string }) => ({
-              jobId: v.job_id,
-              generationId: v.id,
-              status: 'processing' as const,
-              placeholderIds: [v.id],
-            }));
-
-          if (processingTasks.length > 0) {
-            setActiveTasks(processingTasks);
-            console.log('🔄 Retomando polling para', processingTasks.length, 'vídeo(s)');
+          // ⭐ Iniciar polling para vídeos em processamento (TODOS - incluindo 2.0)
+          if (processingVideos.length > 0) {
+            console.log('🔄 Retomando polling para', processingVideos.length, 'vídeo(s)');
+            
+            allVideos
+              .filter((v: { status: string }) => v.status === 'processing')
+              .forEach((v: { id: string; model: string }) => {
+                const isBuua2Video = v.model?.includes('veo-') || v.model?.includes('Veo') || v.model?.includes('Buua 2.0');
+                if (isBuua2Video) {
+                  console.log('🔄 Polling Buua 2.0 para:', v.id);
+                  startPollingBuua2(v.id);
+                } else {
+                  console.log('🔄 Polling Buua 1.0 para:', v.id);
+                  startPolling(v.id, 'async');
+                }
+              });
           }
         }
       } catch (error) {
@@ -401,7 +511,7 @@
       } finally {
         setIsLoadingHistory(false);
       }
-    }, []);
+    }, [startPollingBuua2, startPolling]);
 
     useEffect(() => {
       loadHistory();
@@ -411,24 +521,6 @@
     // NOTA: Este polling era usado para OpenAI, agora usamos startPolling() para LaoZhang
     // Mantido comentado para referência, mas não é mais usado
     // =======================================================================
-    
-    // Polling antigo (OpenAI) - DESABILITADO
-    const pollTaskStatus = useCallback(
-      async () => {
-        console.warn('⚠️ pollTaskStatus() chamado mas está DESABILITADO. Use startPolling() ao invés.');
-        return; // Não faz nada
-      },
-      []
-    );
-
-    // useEffect para activeTasks - DESABILITADO
-    useEffect(() => {
-      // Polling antigo desabilitado - agora usamos startPolling()
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
-      }
-    }, [activeTasks, pollTaskStatus]);
 
     // Função auxiliar para comprimir imagem
     const compressImage = (file: File): Promise<string> => {
@@ -477,7 +569,7 @@
       });
     };
 
-    // Upload de imagem COM COMPRESSÃO
+    // Upload de imagem COM COMPRESSÃO E MODERAÇÃO INSTANTÂNEA
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
@@ -501,15 +593,8 @@
       }
 
       try {
-        // ⭐ Mostrar loading
-        Swal.fire({
-          title: 'Processando imagem...',
-          text: 'Comprimindo e otimizando...',
-          allowOutsideClick: false,
-          didOpen: () => {
-            Swal.showLoading();
-          }
-        });
+        // ⭐ Ativar loading visual no botão (sem modal)
+        setIsUploadingImage(true);
 
         // ⭐ Comprimir imagem
         const compressedBase64 = await compressImage(file);
@@ -519,17 +604,69 @@
           compressedSize: `${(compressedBase64.length / 1024).toFixed(2)} KB`,
           reduction: `${(((file.size - compressedBase64.length) / file.size) * 100).toFixed(1)}%`,
         });
+
+        // 🛡️ MODERAÇÃO INSTANTÂNEA - Validar imagem ANTES de aceitar
+        console.log(`🛡️ Moderando imagem para Buua ${selectedVersion}...`);
+
+        const moderationResponse = await fetch('/api/moderate-image', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            imageBase64: compressedBase64,
+            version: selectedVersion, // Usa a versão selecionada (1.0 ou 2.0)
+          }),
+        });
+
+        const moderationResult = await moderationResponse.json();
+
+        // Se bloqueada, mostrar erro e NÃO aceitar a imagem
+        if (moderationResult.blocked) {
+          console.warn('🚫 Imagem bloqueada:', moderationResult);
+          
+          // ⭐ SÓ AGORA mostra modal (apenas se houver erro)
+          Swal.fire({
+            icon: 'error',
+            title: moderationResult.reason === 'real_face' 
+              ? '🚫 Rosto Real Detectado' 
+              : moderationResult.reason === 'child'
+              ? '🚫 Proteção Infantil'
+              : moderationResult.reason === 'celebrity'
+              ? '🚫 Celebridade Detectada'
+              : moderationResult.reason === 'nudity'
+              ? '🚫 Conteúdo Impróprio'
+              : '🚫 Conteúdo Não Permitido',
+            html: moderationResult.message.replace(/\n/g, '<br>'),
+            confirmButtonText: 'Entendi',
+            confirmButtonColor: '#ef4444',
+            width: '600px',
+          });
+          
+          // Limpar o input para permitir nova tentativa
+          e.target.value = '';
+          setIsUploadingImage(false);
+          return;
+        }
+
+        // ✅ Imagem aprovada - aceitar sem modal, apenas feedback visual
+        console.log('✅ Imagem aprovada pela moderação');
         
         setUploadedImage(compressedBase64);
+        setIsUploadingImage(false);
         
-        Swal.close();
       } catch (error) {
         console.error('Erro ao processar imagem:', error);
+        setIsUploadingImage(false);
+        
         Swal.fire({
           icon: 'error',
           title: 'Erro ao processar',
           text: 'Não foi possível processar a imagem. Tente outra.',
         });
+        
+        // Limpar o input
+        e.target.value = '';
       }
     };
 
@@ -744,6 +881,17 @@
                 extraCredits: data.newExtraCredits || prev.extraCredits,
               }));
 
+              // 🔔 DISPARAR EVENTO para atualizar créditos no AuthenticatedShell
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('creditsDeducted', {
+                  detail: {
+                    credits: data.newCredits,
+                    extraCredits: data.newExtraCredits,
+                  }
+                }));
+                console.log('🔔 Evento creditsDeducted disparado (Buua 2.0)');
+              }
+
               console.log('✅ Vídeo criado no banco:', realId);
               console.log('🔄 Iniciando polling para Buua 2.0...');
               
@@ -894,6 +1042,17 @@
           extraCredits: data.newExtraCredits || prev.extraCredits,
         }));
 
+        // 🔔 DISPARAR EVENTO para atualizar créditos no AuthenticatedShell
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('creditsDeducted', {
+            detail: {
+              credits: data.newCredits,
+              extraCredits: data.newExtraCredits,
+            }
+          }));
+          console.log('🔔 Evento creditsDeducted disparado (Buua 1.0)');
+        }
+
         setPrompt('');
         setUploadedImage(null);
 
@@ -923,109 +1082,6 @@
         
         setIsGenerating(false);
       }
-    };
-
-    // Polling para verificar se o vídeo está pronto (Sync ou Async)
-    const startPolling = (generationId: string, apiType: 'sync' | 'async' = 'async') => {
-      const endpoint = apiType === 'sync' 
-        ? `/api/generate-video/status?id=${generationId}`
-        : `/api/generate-video/status-async?id=${generationId}`;
-      
-      const pollIntervalTime = apiType === 'sync' ? 3000 : 5000; // 3s para sync, 5s para async
-      
-      console.log(`🔄 Iniciando polling ${apiType} para:`, generationId, `(verificando a cada ${pollIntervalTime/1000}s)`);
-      
-      const pollInterval = setInterval(async () => {
-        try {
-          const response = await fetch(endpoint);
-          const data = await response.json();
-
-          console.log('📊 Status atual:', data);
-
-          if (data.status === 'completed' && data.videoUrl) {
-            // Atualizar o card com o vídeo pronto
-            setVideos((prev) => 
-              prev.map((video) => 
-                video.id === generationId
-                  ? { ...video, videoUrl: data.videoUrl, isLoading: false }
-                  : video
-              )
-            );
-            
-            clearInterval(pollInterval);
-            
-            // Modal de notificação removido conforme solicitado
-          } else if (data.status === 'failed') {
-            // Remover card se falhou
-            setVideos((prev) => prev.filter((video) => video.id !== generationId));
-            clearInterval(pollInterval);
-            
-            Swal.fire({
-              title: '❌ Erro',
-              text: data.message || 'Não foi possível gerar o vídeo. Seus créditos foram reembolsados.',
-              icon: 'error',
-            });
-          }
-          // Se ainda está processing, continuar esperando
-        } catch (error) {
-          console.error('Erro no polling:', error);
-        }
-      }, pollIntervalTime);
-
-      // Limpar após 10 minutos (timeout)
-      setTimeout(() => {
-        clearInterval(pollInterval);
-      }, 600000);
-    };
-
-    // ⭐ Polling específico para Buua 2.0 (verifica direto no banco)
-    const startPollingBuua2 = (generationId: string) => {
-      const pollIntervalTime = 5000; // 5s
-      
-      console.log(`🔄 Iniciando polling Buua 2.0 para:`, generationId, `(verificando a cada ${pollIntervalTime/1000}s)`);
-      
-      const pollInterval = setInterval(async () => {
-        try {
-          const response = await fetch(`/api/generate-video/status-async?id=${generationId}`);
-          const data = await response.json();
-
-          console.log('📊 Status Buua 2.0:', data);
-
-          if (data.status === 'completed' && data.videoUrl) {
-            // ⭐ Vídeo pronto! Atualizar o card
-            setVideos((prev) => 
-              prev.map((video) => 
-                video.id === generationId
-                  ? { ...video, videoUrl: data.videoUrl, isLoading: false }
-                  : video
-              )
-            );
-            
-            clearInterval(pollInterval);
-            
-            // Modal de notificação removido conforme solicitado
-          } else if (data.status === 'failed') {
-            // Vídeo falhou - remover card
-            setVideos((prev) => prev.filter((video) => video.id !== generationId));
-            clearInterval(pollInterval);
-            
-            Swal.fire({
-              title: '❌ Erro',
-              text: data.message || 'Não foi possível gerar o vídeo. Seus créditos foram reembolsados.',
-              icon: 'error',
-            });
-          }
-          // Se ainda está processing, continuar esperando
-        } catch (error) {
-          console.error('Erro no polling Buua 2.0:', error);
-        }
-      }, pollIntervalTime);
-
-      // Limpar após 10 minutos (timeout)
-      setTimeout(() => {
-        clearInterval(pollInterval);
-        console.log('⏰ Timeout polling Buua 2.0 - 10min');
-      }, 600000);
     };
 
     // Deletar
@@ -1356,19 +1412,36 @@
                       </div>
                     ) : (
                       <label 
-                        className="flex cursor-pointer items-center gap-1.5 rounded-xl border-2 border-dashed border-gray-300 bg-white/70 px-2 py-1.5 transition-all hover:border-emerald-400 hover:bg-emerald-50/80 sm:gap-2 sm:px-3 sm:py-2"
-                        title="Adicionar imagem de referência (use fotos reais, não avatares de IA)"
+                        className={`flex cursor-pointer items-center gap-1.5 rounded-xl border-2 border-dashed px-2 py-1.5 transition-all sm:gap-2 sm:px-3 sm:py-2 ${
+                          isUploadingImage 
+                            ? 'border-blue-400 bg-blue-50/80 animate-pulse' 
+                            : 'border-gray-300 bg-white/70 hover:border-emerald-400 hover:bg-emerald-50/80'
+                        }`}
+                        title={isUploadingImage ? 'Validando imagem...' : 'Adicionar imagem de referência'}
                       >
-                        <svg className="h-4 w-4 text-gray-600 sm:h-5 sm:w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        <span className="text-[10px] font-medium text-gray-600 sm:text-xs">Imagem</span>
+                        {isUploadingImage ? (
+                          <>
+                            <svg className="h-4 w-4 animate-spin text-blue-600 sm:h-5 sm:w-5" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span className="text-[10px] font-medium text-blue-600 sm:text-xs">Validando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <svg className="h-4 w-4 text-gray-600 sm:h-5 sm:w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            <span className="text-[10px] font-medium text-gray-600 sm:text-xs">Imagem</span>
+                          </>
+                        )}
                         <input
                           ref={fileInputRef}
                           type="file"
                           accept="image/jpeg,image/png"
                           onChange={handleImageUpload}
                           className="hidden"
+                          disabled={isUploadingImage}
                         />
                       </label>
                     )}

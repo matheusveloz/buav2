@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase-server';
+import { replaceSupabaseDomain } from '@/lib/custom-domain';
 
 export const dynamic = 'force-dynamic';
 
@@ -302,7 +303,7 @@ export async function GET(request: NextRequest) {
                 .from('generated-videos')
                 .getPublicUrl(fileName);
               
-              videoUrl = publicUrlData.publicUrl;
+              videoUrl = replaceSupabaseDomain(publicUrlData.publicUrl);
               console.log('✅ Vídeo salvo no Supabase:', videoUrl);
             } else {
               console.error('❌ Erro ao salvar vídeo:', uploadError);

@@ -135,7 +135,8 @@ export default function ImageGeneratorClient({
   }, []);
   const { showWelcomeModal, handleCloseModal } = useWelcomeModal(userEmail, isFirstTime);
   const [lastScrollY, setLastScrollY] = useState(0); // Última posição do scroll
-  const [referenceImages, setReferenceImages] = useState<string[]>([]); // Imagens de referência (base64) para v2-quality
+  const [referenceImages, setReferenceImages] = useState<string[]>([]);
+  const [isUploadingReferenceImages, setIsUploadingReferenceImages] = useState(false); // 🆕 Loading state // Imagens de referência (base64) para v2-quality
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const sizeMenuRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -952,18 +953,8 @@ export default function ImageGeneratorClient({
     const filesToProcess = Array.from(files).slice(0, MAX_REFERENCE_IMAGES - referenceImages.length);
 
     try {
-      // ✅ OTIMIZAÇÃO EXTREMA: Upload para Storage e usar URLs ao invés de base64
-      console.log(`📤 Fazendo upload de ${filesToProcess.length} imagens para Storage (URLs públicas)...`);
-      
-      // Mostrar loading
-      Swal.fire({
-        title: 'Preparando imagens...',
-        text: `Fazendo upload de ${filesToProcess.length} ${filesToProcess.length === 1 ? 'imagem' : 'imagens'}`,
-        allowOutsideClick: false,
-        didOpen: () => {
-          Swal.showLoading();
-        }
-      });
+      // ✅ Ativar loading visual no botão (sem modal)
+      setIsUploadingReferenceImages(true);
       
       const uploadedUrls = await Promise.all(
         filesToProcess.map(async (file, index) => {
@@ -1012,6 +1003,40 @@ export default function ImageGeneratorClient({
             });
 
             console.log(`✅ Imagem ${index + 1} comprimida: ${file.name}`);
+            
+            // 🛡️ MODERAÇÃO INSTANTÂNEA - Validar imagem ANTES de fazer upload
+            console.log(`🛡️ Moderando imagem de referência ${index + 1}...`);
+
+            // ✅ v2-quality e v3-high-quality: regras flexíveis (apenas nudez explícita bloqueada)
+            // ✅ Celebridades, crianças, biquini/maiô = PERMITIDOS
+            // 🚫 Apenas nudez explícita = BLOQUEADA
+            const moderationVersion = (selectedModel.id === 'v2-quality' || selectedModel.id === 'v3-high-quality') ? '3.0' : '2.0';
+            
+            console.log(`📋 Usando regras de moderação versão ${moderationVersion} para ${selectedModel.id}`);
+
+            const moderationResponse = await fetch('/api/moderate-image', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                imageBase64: compressedBase64,
+                version: moderationVersion, // v2/v3: regras flexíveis | v1: regras padrão
+              }),
+            });
+
+            const moderationResult = await moderationResponse.json();
+
+            // Se bloqueada, mostrar erro específico
+            if (moderationResult.blocked) {
+              console.warn(`🚫 Imagem ${index + 1} bloqueada:`, moderationResult);
+              
+              throw new Error(
+                `Imagem ${index + 1} não permitida:\n${moderationResult.message.substring(0, 150)}`
+              );
+            }
+
+            console.log(`✅ Imagem ${index + 1} aprovada pela moderação (${moderationVersion})`);
             
             // ✅ Fazer upload para Storage e obter URL pública
             const timestamp = Date.now();
@@ -1064,24 +1089,22 @@ export default function ImageGeneratorClient({
       Swal.close();
       
       setReferenceImages((prev) => [...prev, ...uploadedUrls].slice(0, MAX_REFERENCE_IMAGES));
+      setIsUploadingReferenceImages(false);
       
       console.log(`✅ ${uploadedUrls.length} imagens prontas (URLs públicas)`);
       console.log(`📦 Payload total: ~${uploadedUrls.reduce((sum, url) => sum + url.length, 0)} bytes (ao invés de MB!)`);
       
-      Swal.fire({
-        icon: 'success',
-        title: 'Imagens adicionadas!',
-        text: `${uploadedUrls.length} ${uploadedUrls.length === 1 ? 'imagem adicionada' : 'imagens adicionadas'} com sucesso`,
-        timer: 2000,
-        showConfirmButton: false,
-      });
-      
     } catch (error) {
       console.error('Erro ao carregar imagem:', error);
+      setIsUploadingReferenceImages(false);
+      
+      // ⭐ SÓ AGORA mostra modal (apenas se houver erro)
       Swal.fire({
         icon: 'error',
-        title: 'Erro ao carregar imagem',
-        text: error instanceof Error ? error.message : 'Não foi possível processar a imagem.',
+        title: 'Erro ao processar',
+        html: error instanceof Error ? error.message.replace(/\n/g, '<br>') : 'Não foi possível processar a imagem.',
+        confirmButtonText: 'Entendi',
+        confirmButtonColor: '#ef4444',
       });
     }
   };
@@ -1827,18 +1850,34 @@ export default function ImageGeneratorClient({
                     
                     {/* Botão de upload se ainda não atingiu o limite */}
                     {referenceImages.length < (selectedModel.maxReferenceImages || 3) && (
-                      <label className="flex h-16 w-16 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-emerald-300 bg-white/50 transition-all hover:border-emerald-500 hover:bg-emerald-50/50">
-                        <svg className="h-6 w-6 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                        </svg>
-                        <span className="mt-1 text-[10px] font-medium text-emerald-700">Add</span>
+                      <label className={`flex h-16 w-16 flex-col items-center justify-center rounded-lg border-2 border-dashed transition-all ${
+                        isUploadingReferenceImages
+                          ? 'border-blue-400 bg-blue-50 animate-pulse cursor-wait'
+                          : 'border-emerald-300 bg-white/50 cursor-pointer hover:border-emerald-500 hover:bg-emerald-50/50'
+                      }`}>
+                        {isUploadingReferenceImages ? (
+                          <>
+                            <svg className="h-6 w-6 animate-spin text-blue-600" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span className="mt-1 text-[10px] font-medium text-blue-700">Validando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <svg className="h-6 w-6 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                            </svg>
+                            <span className="mt-1 text-[10px] font-medium text-emerald-700">Add</span>
+                          </>
+                        )}
                         <input
                           type="file"
                           accept="image/*"
                           multiple
                           onChange={handleReferenceImageUpload}
                           className="hidden"
-                          disabled={isGenerating}
+                          disabled={isGenerating || isUploadingReferenceImages}
                         />
                       </label>
                     )}
@@ -1846,7 +1885,9 @@ export default function ImageGeneratorClient({
                   
                   <p className="mt-2 text-[10px] text-emerald-600">
                     {selectedModel.id === 'v3-high-quality' 
-                      ? `Adicione até ${selectedModel.maxReferenceImages} imagens para edição/combinação com IA (Buua). Aceita JPG, PNG, WEBP, GIF.`
+                      ? `✨ v3: Adicione até ${selectedModel.maxReferenceImages} imagens (celebridades, crianças, biquini OK). Apenas nudez explícita bloqueada. JPG, PNG, WEBP, GIF.`
+                      : selectedModel.id === 'v2-quality'
+                      ? '✨ v2: Adicione até 3 imagens (celebridades, crianças, biquini OK). Apenas nudez explícita bloqueada. JPG, PNG, WEBP, GIF.'
                       : 'Adicione até 3 imagens para edição/combinação com IA. Aceita JPG, PNG, WEBP, GIF.'
                     }
                   </p>

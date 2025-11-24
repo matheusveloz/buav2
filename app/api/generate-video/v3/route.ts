@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase-server';
 import { rateLimiter } from '@/lib/rate-limiter';
+import { replaceSupabaseDomain } from '@/lib/custom-domain';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -543,13 +544,13 @@ export async function POST(request: NextRequest) {
 
       console.log('✅ Upload concluído:', uploadData.path);
 
-      // 4. Obter URL pública do vídeo
+      // 4. Obter URL pública do vídeo com domínio customizado
       const { data: publicUrlData } = supabase
         .storage
         .from('generated-videos')
         .getPublicUrl(filePath);
 
-      const finalVideoUrl = publicUrlData.publicUrl;
+      const finalVideoUrl = replaceSupabaseDomain(publicUrlData.publicUrl);
       console.log('✅ URL pública gerada:', finalVideoUrl);
 
       // 5. Atualizar banco com vídeo no nosso storage

@@ -1,4 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import { replaceSupabaseDomain } from '@/lib/custom-domain';
 
 /**
  * Converte data URL para Blob
@@ -97,19 +98,21 @@ export async function uploadBase64ToStorage(
       return null;
     }
     
-    // Obter URL pública
+    // Obter URL pública com domínio customizado
     const { data: { publicUrl } } = supabase.storage
       .from('generated-images')
       .getPublicUrl(fileName);
     
+    const finalUrl = replaceSupabaseDomain(publicUrl);
+    
     console.log('✅ Upload concluído:', {
       fileName,
-      publicUrl,
+      publicUrl: finalUrl,
       imageType,
     });
     
     return {
-      imageUrl: publicUrl,
+      imageUrl: finalUrl,
       imageType: imageType,
     };
   } catch (error) {
