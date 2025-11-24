@@ -6,18 +6,18 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: '100mb',
     },
-    // Otimizar tamanho da função
-    outputFileTracingIncludes: {
-      '/api/audio/upload': ['./lib/**/*'],
-    },
-    outputFileTracingExcludes: {
-      '/api/audio/upload': [
-        'node_modules/@swc/core-linux-x64-gnu',
-        'node_modules/@swc/core-linux-x64-musl',
-        'node_modules/@esbuild',
-        'node_modules/webpack',
-      ],
-    },
+  },
+  // Otimizar tamanho da função (fora do experimental no Next.js 16)
+  outputFileTracingIncludes: {
+    '/api/audio/upload': ['./lib/**/*'],
+  },
+  outputFileTracingExcludes: {
+    '/api/audio/upload': [
+      'node_modules/@swc/core-linux-x64-gnu',
+      'node_modules/@swc/core-linux-x64-musl',
+      'node_modules/@esbuild',
+      'node_modules/webpack',
+    ],
   },
   // Configurar limite de body para API routes
   async headers() {
