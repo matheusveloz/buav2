@@ -196,7 +196,7 @@ export function getModerationBlockMessage(result: ModerationResult): string {
 export async function moderateContent(
   prompt: string, 
   imageBase64?: string,
-  version: '1.0' | '2.0' = '2.0'
+  version: '1.0' | '2.0' | '3.0' = '2.0'
 ): Promise<{
   blocked: boolean;
   reason?: string;
@@ -219,8 +219,10 @@ export async function moderateContent(
       detectCelebrityWithGPT, 
       shouldBlockBuua10, 
       shouldBlockBuua20,
+      shouldBlockBuua30,
       getBlockMessageBuua10,
       getBlockMessageBuua20,
+      getBlockMessageBuua30,
     } = await import('./celebrity-detection-gpt');
     
     const detectionResult = await detectCelebrityWithGPT(imageBase64);
@@ -235,6 +237,16 @@ export async function moderateContent(
                   detectionResult.hasObscene ? 'obscene' : 
                   detectionResult.hasRealFace ? 'real_face' : 'content',
           details: getBlockMessageBuua10(detectionResult),
+        };
+      }
+    } else if (version === '3.0') {
+      // BUUA 3.0: Mais permissivo - apenas bloqueia nudez explícita e obsceno
+      if (shouldBlockBuua30(detectionResult)) {
+        return {
+          blocked: true,
+          reason: detectionResult.hasNudity ? 'nudity' : 
+                  detectionResult.hasObscene ? 'obscene' : 'content',
+          details: getBlockMessageBuua30(detectionResult),
         };
       }
     } else {

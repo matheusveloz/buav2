@@ -400,3 +400,49 @@ export function getBlockMessageBuua20(result: CelebrityDetectionResult): string 
   return 'Conteúdo não permitido detectado no Buua 2.0.';
 }
 
+/**
+ * 🎯 MODERAÇÃO ESPECÍFICA PARA BUUA 3.0 (V2/V3 HIGH-QUALITY)
+ * Regras mais flexíveis - apenas bloqueia nudez explícita
+ * Permite: pessoas, crianças (com roupas), celebridades (com roupas), biquini/maiô
+ * Bloqueia: apenas nudez explícita e conteúdo obsceno/violento
+ */
+export function shouldBlockBuua30(result: CelebrityDetectionResult): boolean {
+  // 🚫 APENAS bloquear nudez explícita (genitais expostos, nudez completa)
+  if (result.hasNudity) {
+    console.log(`🚫 BUUA 3.0: Bloqueando nudez explícita`);
+    return true;
+  }
+
+  // 🚫 Bloquear conteúdo obsceno/violento extremo
+  if (result.hasObscene) {
+    console.log(`🚫 BUUA 3.0: Bloqueando conteúdo obsceno/violento`);
+    return true;
+  }
+
+  // ✅ Permitir tudo o resto: pessoas, crianças com roupas, celebridades com roupas, biquini/maiô
+  console.log(`✅ BUUA 3.0: Conteúdo permitido (regras flexíveis)`);
+  return false;
+}
+
+/**
+ * 🎯 Retorna mensagem específica para BUUA 3.0
+ */
+export function getBlockMessageBuua30(result: CelebrityDetectionResult): string {
+  if (result.hasNudity) {
+    return `🚫 Nudez Explícita Detectada\n\n` +
+           `Detectamos nudez explícita na imagem.\n\n` +
+           `⚠️ Não é permitido usar imagens com nudez explícita.\n\n` +
+           `✅ Permitido: Pessoas com roupas, biquini, maiô, roupas de banho.\n` +
+           `🚫 Não permitido: Nudez completa, genitais expostos.`;
+  }
+
+  if (result.hasObscene) {
+    return `🚫 Conteúdo Impróprio Detectado\n\n` +
+           `Detectamos conteúdo obsceno, violento ou gráfico na imagem.\n\n` +
+           `⚠️ Não é permitido animar conteúdo violento, gore ou obsceno.\n\n` +
+           `✅ Use: Imagens apropriadas.`;
+  }
+
+  return 'Conteúdo não permitido detectado no Buua 3.0.';
+}
+

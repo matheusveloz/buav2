@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { imageBase64, version = '2.0' } = body as { 
       imageBase64: string; 
-      version: '1.0' | '2.0';
+      version: '1.0' | '2.0' | '3.0';
     };
 
     if (!imageBase64) {
@@ -23,8 +23,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Validar versão
-    if (version !== '1.0' && version !== '2.0') {
-      return NextResponse.json({ error: 'Versão inválida' }, { status: 400 });
+    if (version !== '1.0' && version !== '2.0' && version !== '3.0') {
+      return NextResponse.json({ error: 'Versão inválida (aceito: 1.0, 2.0, 3.0)' }, { status: 400 });
     }
 
     console.log(`🔍 Analisando imagem para Buua ${version}...`);
@@ -34,8 +34,10 @@ export async function POST(request: NextRequest) {
       detectCelebrityWithGPT, 
       shouldBlockBuua10, 
       shouldBlockBuua20,
+      shouldBlockBuua30,
       getBlockMessageBuua10,
       getBlockMessageBuua20,
+      getBlockMessageBuua30,
     } = await import('@/lib/celebrity-detection-gpt');
 
     // Detectar conteúdo na imagem
@@ -57,7 +59,18 @@ export async function POST(request: NextRequest) {
       } else if (detectionResult.hasRealFace) {
         blockReason = 'real_face';
       }
+    } else if (version === '3.0') {
+      // Versão 3.0: Mais flexível - apenas bloqueia nudez explícita e conteúdo obsceno
+      isBlocked = shouldBlockBuua30(detectionResult);
+      blockMessage = getBlockMessageBuua30(detectionResult);
+      
+      if (detectionResult.hasNudity) {
+        blockReason = 'nudity';
+      } else if (detectionResult.hasObscene) {
+        blockReason = 'obscene';
+      }
     } else {
+      // Versão 2.0: Padrão
       isBlocked = shouldBlockBuua20(detectionResult);
       blockMessage = getBlockMessageBuua20(detectionResult);
       

@@ -225,8 +225,8 @@
     }, []);
 
     // ==================== POLLING FUNCTIONS ====================
-    // ⭐ Polling específico para Buua 2.0 (verifica direto no banco)
-    const startPollingBuua2 = useCallback((generationId: string) => {
+   // ⭐ Polling específico para Buua 2.0 (verifica direto no banco)
+   const startPollingBuua2 = useCallback((generationId: string) => {
       const pollIntervalTime = 5000; // 5s
       
       console.log(`🔄 Iniciando polling Buua 2.0 para:`, generationId, `(verificando a cada ${pollIntervalTime/1000}s)`);
@@ -273,7 +273,7 @@
         clearInterval(pollInterval);
         console.log('⏰ Timeout polling Buua 2.0 - 10min');
       }, 600000);
-    }, []);
+    }, [setVideos]); // ✅ FIX: Include setVideos dependency
 
     // Polling para verificar se o vídeo está pronto (Sync ou Async)
     const startPolling = useCallback((generationId: string, apiType: 'sync' | 'async' = 'async') => {
@@ -326,7 +326,7 @@
       setTimeout(() => {
         clearInterval(pollInterval);
       }, 600000);
-    }, []);
+    }, [setVideos]); // ✅ FIX: Include setVideos dependency
 
     // ==================== 🚀 VERIFICAR VÍDEOS PENDENTES AO CARREGAR ====================
     // Quando usuário abre a página, verifica se há vídeos em processamento

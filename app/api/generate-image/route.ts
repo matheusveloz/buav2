@@ -133,8 +133,14 @@ export async function POST(request: NextRequest) {
       console.log('🛡️ Moderando conteúdo...');
       const { moderateContent } = await import('@/lib/content-moderation');
       
+      // Determinar versão de moderação baseada no modelo
+      // v2-quality e v3-high-quality: versão 3.0 (mais permissiva - apenas bloqueia nudez explícita)
+      // outros modelos: versão 2.0 (padrão)
+      const moderationVersion = (model === 'v2-quality' || model === 'v3-high-quality') ? '3.0' : '2.0';
+      console.log(`📋 Usando moderação versão ${moderationVersion} para modelo ${model}`);
+      
       // MODERAÇÃO: Detectar prompt impróprio
-      const promptModeration = await moderateContent(prompt, undefined, '2.0');
+      const promptModeration = await moderateContent(prompt, undefined, moderationVersion);
       
       if (promptModeration.blocked) {
         console.warn(`🚫 CONTEÚDO BLOQUEADO (prompt):`, {
@@ -154,7 +160,7 @@ export async function POST(request: NextRequest) {
         console.log(`🛡️ Moderando ${referenceImages.length} imagem(ns) de referência...`);
         
         for (let i = 0; i < referenceImages.length; i++) {
-          const imageModeration = await moderateContent('', referenceImages[i], '2.0');
+          const imageModeration = await moderateContent('', referenceImages[i], moderationVersion);
           
           if (imageModeration.blocked) {
             console.warn(`🚫 IMAGEM DE REFERÊNCIA ${i + 1} BLOQUEADA:`, {
